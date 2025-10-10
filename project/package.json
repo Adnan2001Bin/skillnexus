@@ -13,7 +13,8 @@
     "framer-motion": "^12.23.22",
     "mongoose": "^8.19.1",
     "next": "15.5.4",
-    "nodemailer": "^7.0.9",
+    "next-auth": "^4.24.11",
+    "nodemailer": "^6.6.5",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "zod": "^4.1.12"
