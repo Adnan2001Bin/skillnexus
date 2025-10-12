@@ -47,24 +47,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<SignUpRes
           { status: 400 }
         );
       } else {
-        const hashedPassword = await bcrypt.hash(parsedData.password, 10);
-        existingUserByEmail.userName = parsedData.userName;
-        existingUserByEmail.password = hashedPassword;
-        existingUserByEmail.verificationCode = verificationCode;
-        existingUserByEmail.verificationCodeExpires = expiryDate;
-        user = await existingUserByEmail.save();
-      }
-    } else {
-      const hashedPassword = await bcrypt.hash(parsedData.password, 10);
-      user = new UserModel({
-        userName: parsedData.userName,
-        email: parsedData.email,
-        password: hashedPassword,
-        verificationCode,
-        verificationCodeExpires: expiryDate,
-      });
-      await user.save();
-    }
+    const hashedPassword = await bcrypt.hash(parsedData.password, 10);
+    existingUserByEmail.userName = parsedData.userName;
+    existingUserByEmail.password = hashedPassword;
+    existingUserByEmail.role = parsedData.role; // <-- persist role
+    existingUserByEmail.verificationCode = verificationCode;
+    existingUserByEmail.verificationCodeExpires = expiryDate;
+    user = await existingUserByEmail.save();
+  }
+} else {
+  const hashedPassword = await bcrypt.hash(parsedData.password, 10);
+  user = new UserModel({
+    userName: parsedData.userName,
+    email: parsedData.email,
+    password: hashedPassword,
+    role: parsedData.role,              // <-- persist role
+    verificationCode,
+    verificationCodeExpires: expiryDate,
+  });
+  await user.save();
+}
 
     // send email
     const emailResponse = await sendVerificationEmail({

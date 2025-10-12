@@ -5,7 +5,7 @@ export interface IUser extends Document {
   userName: string;
   email: string;
   password: string;
-  role: "user" | "talent";
+  role: "client" | "freelancer" | "admin";
   verificationCode: string;
   verificationCodeExpires: Date;
   isVerified: boolean;
@@ -35,11 +35,7 @@ const UserSchema: Schema<IUser> = new Schema(
       required: [true, "Password is required"],
       minlength: [6, "Password must be at least 6 characters"],
     },
-    role: {
-      type: String,
-      enum: ["user", "talent"],
-      default: "user",
-    },
+
     verificationCode: {
       type: String,
       default: null,
@@ -51,6 +47,11 @@ const UserSchema: Schema<IUser> = new Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    role: {
+      type: String,
+      enum: ["client", "freelancer", "admin"],
+      default: "client",
     },
   },
   { timestamps: true }

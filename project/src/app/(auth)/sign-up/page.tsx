@@ -69,7 +69,7 @@ const Blob = ({
 );
 
 export default function SignUpPage() {
-  const [role, setRole] = useState<"user" | "talent">("user");
+  const [role, setRole] = useState<"client" | "freelancer" | "admin">("client");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -188,7 +188,7 @@ export default function SignUpPage() {
       router.push(
         `/verify?email=${encodeURIComponent(
           form.email.trim().toLowerCase()
-        )}&user=${encodeURIComponent(form.userName.trim())}`
+        )}&user=${encodeURIComponent(form.userName.trim())}&role=${role}`
       );
       setForm({ userName: "", email: "", password: "", confirm: "" });
     } catch (err: any) {
@@ -457,15 +457,17 @@ export default function SignUpPage() {
                 role="tablist"
                 aria-label="Choose your role"
               >
-                {[
-                  { key: "user", label: "Client" },
-                  { key: "talent", label: "Freelancer" },
-                ].map((r) => (
+                {(
+                  [
+                    { key: "client", label: "Client" },
+                    { key: "freelancer", label: "Freelancer" },
+                  ] as const
+                ).map((r) => (
                   <button
                     key={r.key}
                     role="tab"
-                    aria-selected={role === (r.key as any)}
-                    onClick={() => setRole(r.key as any)}
+                    aria-selected={role === r.key}
+                    onClick={() => setRole(r.key)}
                     className={`px-4 py-2 text-sm font-medium transition ${
                       role === r.key
                         ? "rounded-full bg-white text-[#1E293B] shadow"

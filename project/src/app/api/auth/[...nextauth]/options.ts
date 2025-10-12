@@ -124,8 +124,7 @@ export const authOptions: NextAuthOptions = {
         );
         if (!isPasswordValid) throw new Error("Invalid password");
 
-        // Allow talents to sign in even if not verified
-        if (!user.isVerified && user.role !== "talent") {
+        if (!user.isVerified && user.role !== "freelancer") {
           throw new Error("Please verify your account before signing in.");
         }
 

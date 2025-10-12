@@ -32,7 +32,9 @@ export default function VerifyPage() {
     params.get("userName") ||
     ""
   ).trim();
-
+  const role = (params.get("role") || "client") as
+    | "client"
+    | "freelancer"
   const [email, setEmail] = useState(initialEmail);
   const [userName, setUserName] = useState(initialUserName);
 
@@ -70,38 +72,52 @@ export default function VerifyPage() {
     if (e.key === "ArrowRight" && i < 5) refs.current[i + 1]?.focus();
   };
 
-  const verify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setSuccess(null);
+const verify = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setError(null);
+  setSuccess(null);
 
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setError("Enter a valid email");
-      return;
-    }
-    const code = otp.join("");
-    if (code.length !== 6) {
-      setError("Please enter the 6-digit code");
-      return;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    setError("Enter a valid email");
+    return;
+  }
+  const code = otp.join("");
+  if (code.length !== 6) {
+    setError("Please enter the 6-digit code");
+    return;
+  }
+
+  setLoading(true);
+  try {
+    const res = await fetch("/api/verify", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email.toLowerCase(), code }),
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.message || "Verification failed");
+
+    setSuccess(json?.message || "Email verified successfully.");
+
+    // ➜ Do ONE navigation only
+    if (role === "client") {
+      router.replace(
+        `/onboarding/client?email=${encodeURIComponent(email)}&user=${encodeURIComponent(userName)}`
+      );
+    } else {
+      router.replace(
+        `/onboarding/freelancer?email=${encodeURIComponent(email)}&user=${encodeURIComponent(userName)}`
+      );
     }
 
-    setLoading(true);
-    try {
-      const res = await fetch("/api/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.toLowerCase(), code }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.message || "Verification failed");
-      setSuccess(json?.message || "Email verified successfully.");
-      setTimeout(() => router.push("/auth/login"), 900);
-    } catch (err: any) {
-      setError(err.message || "Verification failed");
-    } finally {
-      setLoading(false);
-    }
-  };
+    // ❌ remove this — it overrides your onboarding redirect
+    // setTimeout(() => router.push("/auth/login"), 900);
+  } catch (err: any) {
+    setError(err.message || "Verification failed");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const resend = async () => {
     if (timeLeft > 0) return;
