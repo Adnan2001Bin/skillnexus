@@ -121,7 +121,7 @@ export default function SignInPage() {
             className="mt-4 max-w-lg text-gray-600 md:text-lg"
           >
             Sign in to manage jobs, proposals, and messages. New here?{" "}
-            <a href="/auth/register" className="text-[#1DBF73] underline">
+            <a href="/sign-up" className="text-[#1DBF73] underline">
               Create an account
             </a>
             .
@@ -205,7 +205,7 @@ export default function SignInPage() {
 
                 <p className="text-center text-sm text-gray-600">
                   Don’t have an account?{" "}
-                  <a href="/auth/register" className="font-medium text-[#1DBF73] hover:underline">
+                  <a href="/sign-up" className="font-medium text-[#1DBF73] hover:underline">
                     Sign up
                   </a>
                 </p>

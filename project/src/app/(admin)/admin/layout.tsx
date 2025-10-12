@@ -2,6 +2,7 @@
 import type { ReactNode } from "react";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminTopbar from "@/components/admin/AdminTopbar";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
@@ -13,6 +14,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <AdminTopbar />
           <main className="px-4 py-6 md:px-8">{children}</main>
         </div>
+        <Toaster />
       </div>
     </div>
   );

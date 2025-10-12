@@ -1,3 +1,4 @@
+// src/models/freelancerProfile.model.ts
 import mongoose, { Schema, Document } from "mongoose";
 
 export interface IRatePlan {
@@ -16,12 +17,15 @@ export interface IPortfolioItem {
   projectUrl?: string | null;
 }
 
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
 export interface IFreelancerProfile extends Document {
   user: mongoose.Types.ObjectId;
   location?: string | null;
   profilePicture?: string | null;
   bio?: string | null;
   category?: string | null;
+  services?: string[];
   skills: string[];
   portfolio: IPortfolioItem[];
   ratePlans: IRatePlan[];
@@ -29,6 +33,12 @@ export interface IFreelancerProfile extends Document {
   whatIOffer: string[];
   socialLinks: { platform: string; url: string }[];
   languageProficiency: string[];
+
+  // moderation
+  approvalStatus: ApprovalStatus;
+  rejectionReason?: string | null;
+  reviewedBy?: mongoose.Types.ObjectId | null;
+  reviewedAt?: Date | null;
 }
 
 const FreelancerProfileSchema = new Schema<IFreelancerProfile>(
@@ -38,6 +48,7 @@ const FreelancerProfileSchema = new Schema<IFreelancerProfile>(
     profilePicture: { type: String, default: null },
     bio: { type: String, default: null },
     category: { type: String, default: null },
+    services: { type: [String], default: [] },
     skills: { type: [String], default: [] },
     portfolio: {
       type: [
@@ -67,6 +78,12 @@ const FreelancerProfileSchema = new Schema<IFreelancerProfile>(
     whatIOffer: { type: [String], default: [] },
     socialLinks: { type: [{ platform: String, url: String }], default: [] },
     languageProficiency: { type: [String], default: [] },
+
+    // moderation
+    approvalStatus: { type: String, enum: ["pending", "approved", "rejected"], default: "pending", index: true },
+    rejectionReason: { type: String, default: null },
+    reviewedBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    reviewedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

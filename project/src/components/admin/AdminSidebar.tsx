@@ -34,7 +34,7 @@ export default function AdminSidebar() {
   const handleLogout = async () => {
     // optional: confirm
     // if (!confirm("Sign out of the admin panel?")) return;
-    await signOut({ callbackUrl: "/auth/login" });
+    await signOut({ callbackUrl: "/sign-in" });
   };
 
   return (
@@ -104,7 +104,7 @@ export default function AdminSidebar() {
               />
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium text-slate-800">
-                  {user.name ?? user.email}
+                  {user.userName ?? user.email}
                 </div>
                 <div className="truncate text-xs text-slate-500">
                   {user.email}

@@ -195,7 +195,7 @@ export default function ClientOnboardingPage() {
 
               <div className="mt-2 flex items-center justify-between">
                 <a
-                  href="/auth/register"
+                  href="/sign-up"
                   className="text-sm text-slate-600 underline-offset-2 hover:underline"
                 >
                   Back to sign up

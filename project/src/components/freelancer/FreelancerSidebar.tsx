@@ -32,7 +32,7 @@ export default function FreelancerSidebar({ open, onClose }: Props) {
   const user = session?.user;
 
   const handleLogout = useCallback(async () => {
-    await signOut({ callbackUrl: "/auth/login" });
+    await signOut({ callbackUrl: "/sign-in" });
   }, []);
 
   const baseItem =

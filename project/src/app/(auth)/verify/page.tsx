@@ -111,7 +111,7 @@ const verify = async (e: React.FormEvent) => {
     }
 
     // ❌ remove this — it overrides your onboarding redirect
-    // setTimeout(() => router.push("/auth/login"), 900);
+    // setTimeout(() => router.push("/sign-in"), 900);
   } catch (err: any) {
     setError(err.message || "Verification failed");
   } finally {
@@ -283,7 +283,7 @@ const verify = async (e: React.FormEvent) => {
               <p className="text-center text-xs text-slate-500">
                 Entered the wrong email?{" "}
                 <a
-                  href="/auth/register"
+                  href="/sign-up"
                   className="font-medium text-emerald-700 hover:underline"
                 >
                   Go back
