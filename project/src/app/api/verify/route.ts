@@ -1,6 +1,4 @@
-// ===============================
-// File: app/api/auth/verify/route.ts
-// ===============================
+// app/api/auth/verify/route.ts
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import connectDB from "@/lib/connectDB";
@@ -8,7 +6,7 @@ import UserModel from "@/models/user.model";
 
 const VerifySchema = z.object({
   email: z.string().email({ message: "Invalid email" }).trim(),
-  code: z.string().length(6, { message: "Code must be 6 digits" }),
+  code: z.string().length(6, { message: "Code must be 6 digits" }).trim(),
 });
 
 export async function POST(req: Request) {
@@ -17,7 +15,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { email, code } = VerifySchema.parse(body);
 
-    const user = await UserModel.findOne({ email: email.toLowerCase() });
+    // NOTE: explicitly select hidden fields
+    const user = await UserModel.findOne({ email: email.toLowerCase() })
+      .select("+verificationCode +verificationCodeExpires");
+
     if (!user) {
       return NextResponse.json(
         { success: false, message: "User not found" },
@@ -55,15 +56,15 @@ export async function POST(req: Request) {
     }
 
     user.isVerified = true;
-    user.verificationCode = null as any; // field allows string | null in schema default; cast for TS
-    user.verificationCodeExpires = null as any;
+    user.verificationCode = null;
+    user.verificationCodeExpires = null;
     await user.save();
 
     return NextResponse.json(
       { success: true, message: "Email verified successfully." },
       { status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (err instanceof z.ZodError) {
       return NextResponse.json(
         { success: false, message: err.issues.map((e) => e.message).join(", ") },
@@ -77,5 +78,3 @@ export async function POST(req: Request) {
     );
   }
 }
-
-

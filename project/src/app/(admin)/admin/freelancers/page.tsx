@@ -4,6 +4,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Eye, Trash2, Search } from "lucide-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 
 // ⬇️ shadcn imports
 import { useToast } from "@/components/ui/use-toast";
@@ -492,40 +499,64 @@ function ProfileDrawer({
             )}
 
             <div>
-              <div className="text-xs uppercase tracking-wide text-slate-500">
-                Portfolio
-              </div>
-              {p.portfolio?.length ? (
-                <ul className="mt-2 space-y-2">
-                  {p.portfolio.map((it: any, idx: number) => (
-                    <li
-                      key={idx}
-                      className="rounded-lg border border-slate-200 p-3"
-                    >
-                      <div className="font-medium">{it.title}</div>
-                      <div className="text-sm text-slate-600">
-                        {it.description}
-                      </div>
-                      <div className="mt-1 text-xs">
-                        {it.projectUrl && (
-                          <a
-                            className="text-emerald-700 underline"
-                            href={it.projectUrl}
-                            target="_blank"
-                          >
-                            Project
-                          </a>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+  <div className="text-xs uppercase tracking-wide text-slate-500">
+    Portfolio
+  </div>
+
+  {p.portfolio?.length ? (
+    <Carousel className="mt-2 w-full" opts={{ align: "start", loop: true }}>
+      <CarouselContent>
+        {p.portfolio.map((it: any, idx: number) => (
+          <CarouselItem key={`${it?.title ?? "item"}-${idx}`} className="md:basis-1/2">
+            <div className="h-full rounded-xl border border-slate-200 p-3">
+              {it?.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={it.imageUrl}
+                  alt={it?.title || `Portfolio item ${idx + 1}`}
+                  className="mb-2 h-44 w-full rounded-lg object-cover"
+                />
               ) : (
-                <div className="mt-1 text-sm text-slate-500">
-                  No portfolio items.
+                <div className="mb-2 flex h-44 w-full items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                  No image
                 </div>
               )}
+
+              <div className="font-medium text-slate-900 line-clamp-1">
+                {it?.title || "Untitled project"}
+              </div>
+              {it?.description && (
+                <div className="text-sm text-slate-600 line-clamp-3">
+                  {it.description}
+                </div>
+              )}
+
+              {it?.projectUrl && (
+                <a
+                  className="mt-2 inline-block text-xs text-emerald-700 underline"
+                  href={it.projectUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  View project
+                </a>
+              )}
             </div>
+          </CarouselItem>
+        ))}
+      </CarouselContent>
+
+      {/* Controls pinned below so they don't overlap content */}
+      <div className="mt-3 flex items-center justify-end gap-2">
+        <CarouselPrevious className="static translate-x-0 translate-y-0" />
+        <CarouselNext className="static translate-x-0 translate-y-0" />
+      </div>
+    </Carousel>
+  ) : (
+    <div className="mt-1 text-sm text-slate-500">No portfolio items.</div>
+  )}
+</div>
+
           </div>
         )}
       </div>

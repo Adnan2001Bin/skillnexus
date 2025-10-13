@@ -1,7 +1,6 @@
 // src/app/api/admin/freelancers/route.ts
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/connectDB";
-import FreelancerProfile from "@/models/freelancerProfile.model";
 import UserModel from "@/models/user.model";
 import { categories } from "@/lib/freelance-categories";
 
@@ -18,52 +17,63 @@ export async function GET(req: Request) {
       | "approved"
       | "rejected";
 
-    const filter: any = {};
+    // Base filter: freelancers only
+    const filter: any = { role: "freelancer" };
     if (status) filter.approvalStatus = status;
 
-    // If you also want to search by user fields, we can do it after populate.
-    const profiles = await FreelancerProfile.find(filter)
-      .populate("user", "userName email")
+    // Optional server-side search (hits your text + field indexes)
+    if (q) {
+      const rx = new RegExp(q, "i");
+      filter.$or = [
+        { userName: rx },
+        { email: rx },
+        { category: rx },
+        { services: { $elemMatch: { $regex: rx } } },
+        { skills: { $elemMatch: { $regex: rx } } },
+      ];
+      // If you prefer MongoDB text index search instead of regex:
+      // filter.$text = { $search: q };  // and ensure your text index exists
+    }
+
+    const users = await UserModel.find(filter)
+      // password, verificationCode, verificationCodeExpires have select:false
+      // but you can still be explicit about what you want to return:
+      .select([
+        "userName",
+        "email",
+        "location",
+        "profilePicture",
+        "category",
+        "services",
+        "skills",
+        "portfolio",
+        "ratePlans",
+        "approvalStatus",
+        "rejectionReason",
+        "reviewedAt",
+        "createdAt",
+        "updatedAt",
+      ].join(" "))
       .sort({ createdAt: -1 })
       .lean();
 
-    // Optional client-side-like text search (simple & fast enough for admin lists)
-    const matchesQ = (p: any) => {
-      if (!q) return true;
-      const hay = [
-        p?.user?.userName,
-        p?.user?.email,
-        p?.category,
-        ...(p?.services || []),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      return hay.includes(q.toLowerCase());
-    };
-
-    const list = profiles.filter(matchesQ).map((p: any) => {
-      const categoryLabel =
-        p.category ? CATEGORY_MAP.get(p.category) ?? p.category : null;
-
+    const list = users.map((p: any) => {
+      const categoryLabel = p.category ? (CATEGORY_MAP.get(p.category) ?? p.category) : null;
       return {
         _id: String(p._id),
-        user: String(p.user?._id || ""),
-        userName: p.user?.userName || "",
-        email: p.user?.email || "",
-        location: p.location || null,
-        profilePicture: p.profilePicture || null,
-        category: p.category || null,
-        categoryLabel, // <-- ADDED
+        user: String(p._id),                 // kept for UI compatibility
+        userName: p.userName || "",
+        email: p.email || "",
+        location: p.location ?? null,
+        profilePicture: p.profilePicture ?? null,
+        category: p.category ?? null,
+        categoryLabel,
         services: p.services || [],
         skills: p.skills || [],
         portfolioCount: Array.isArray(p.portfolio) ? p.portfolio.length : 0,
-        ratePlans: (p.ratePlans || []).map((r: any) => ({
-          type: r.type,
-          price: r.price,
-        })),
+        ratePlans: (p.ratePlans || []).map((r: any) => ({ type: r.type, price: r.price })),
         approvalStatus: p.approvalStatus || "pending",
-        rejectionReason: p.rejectionReason || null,
+        rejectionReason: p.rejectionReason ?? null,
         reviewedAt: p.reviewedAt ? new Date(p.reviewedAt).toISOString() : null,
         createdAt: new Date(p.createdAt).toISOString(),
         updatedAt: new Date(p.updatedAt).toISOString(),

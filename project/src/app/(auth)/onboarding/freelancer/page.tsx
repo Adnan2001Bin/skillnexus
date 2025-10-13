@@ -1,16 +1,16 @@
 // app/onboarding/freelancer/page.tsx
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ProfilePictureField } from "@/components/ProfilePictureField";
-
-// ⬇️ Make sure this path matches your project
-import { categories,servicesByCategory } from "@/lib/freelance-categories";
+import { categories, servicesByCategory } from "@/lib/freelance-categories";
 import Image from "next/image";
 import { Images } from "@/lib/images";
+import PortfolioImageField from "@/components/PortfolioImageField";
 
+/* ---------------- Types ---------------- */
 type RatePlan = {
   type: "Basic" | "Standard" | "Premium";
   price: number;
@@ -26,6 +26,7 @@ type PortfolioItem = {
   projectUrl?: string;
 };
 
+/* ---------------- Steps ---------------- */
 const steps = [
   { key: "basics", label: "Basics", icon: BasicIcon },
   { key: "skills", label: "Skills", icon: StarIcon },
@@ -34,30 +35,51 @@ const steps = [
   { key: "preview", label: "Preview", icon: EyeIcon },
 ];
 
+/* ---------------- Helpers ---------------- */
+function normalizeRatePlans(existing?: RatePlan[]): RatePlan[] {
+  const byType = new Map((existing || []).map((p) => [p.type, p]));
+  const base = (type: RatePlan["type"]) =>
+    byType.get(type) || {
+      type,
+      price: 0,
+      description: "",
+      whatsIncluded: [],
+      deliveryDays: type === "Basic" ? 3 : type === "Standard" ? 5 : 7,
+      revisions: type === "Basic" ? 1 : type === "Standard" ? 2 : 3,
+    };
+  return [base("Basic"), base("Standard"), base("Premium")];
+}
+
+/* ---------------- Page ---------------- */
 export default function FreelancerOnboardingPage() {
   const params = useSearchParams();
   const router = useRouter();
+
+  // Optional query params you were using
   const email = (params.get("email") || "").trim();
   const userName = (params.get("user") || "").trim();
+
+  // Treat as edit when ?edit=1 (default to edit if param missing and you’re linking from profile)
+  const isEdit = (params.get("edit") || "1") === "1";
 
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
+  // edit bootstrap flags
+  const [bootstrapped, setBootstrapped] = useState(false);
+  const [loadingExisting, setLoadingExisting] = useState(false);
+
   const [form, setForm] = useState({
     location: "",
     profilePicture: "",
     bio: "",
-    category: "",             // e.g. "programming_tech"
-    services: [] as string[], // from servicesByCategory[category]
+    category: "", // e.g. "programming_tech"
+    services: [] as string[],
     skills: [] as string[],
     portfolio: [] as PortfolioItem[],
-    ratePlans: [
-      { type: "Basic", price: 0, description: "", whatsIncluded: [], deliveryDays: 3, revisions: 1 },
-      { type: "Standard", price: 0, description: "", whatsIncluded: [], deliveryDays: 5, revisions: 2 },
-      { type: "Premium", price: 0, description: "", whatsIncluded: [], deliveryDays: 7, revisions: 3 },
-    ] as RatePlan[],
+    ratePlans: normalizeRatePlans(),
     aboutThisGig: "",
     whatIOffer: [] as string[],
     socialLinks: [] as { platform: string; url: string }[],
@@ -67,6 +89,7 @@ export default function FreelancerOnboardingPage() {
   const inputClass =
     "rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 outline-none ring-emerald-500 focus:ring-2";
 
+  /* ---------- Tag helpers ---------- */
   const addTag = (
     field: "skills" | "whatIOffer" | "languageProficiency",
     value: string
@@ -74,14 +97,19 @@ export default function FreelancerOnboardingPage() {
     if (!value.trim()) return;
     setForm((f) => ({
       ...f,
-      [field]: Array.from(new Set([...f[field], value.trim()])),
+      [field]: Array.from(new Set([...(f[field] as string[]), value.trim()])),
     }));
   };
   const removeTag = (
     field: "skills" | "whatIOffer" | "languageProficiency",
     value: string
-  ) => setForm((f) => ({ ...f, [field]: f[field].filter((t) => t !== value) }));
+  ) =>
+    setForm((f) => ({
+      ...f,
+      [field]: (f[field] as string[]).filter((t) => t !== value),
+    }));
 
+  /* ---------- Portfolio helpers ---------- */
   const addPortfolio = () =>
     setForm((f) => ({
       ...f,
@@ -90,20 +118,29 @@ export default function FreelancerOnboardingPage() {
   const updatePortfolio = (i: number, patch: Partial<PortfolioItem>) =>
     setForm((f) => ({
       ...f,
-      portfolio: f.portfolio.map((p, idx) => (idx === i ? { ...p, ...patch } : p)),
+      portfolio: f.portfolio.map((p, idx) =>
+        idx === i ? { ...p, ...patch } : p
+      ),
     }));
   const removePortfolio = (i: number) =>
-    setForm((f) => ({ ...f, portfolio: f.portfolio.filter((_, idx) => idx !== i) }));
+    setForm((f) => ({
+      ...f,
+      portfolio: f.portfolio.filter((_, idx) => idx !== i),
+    }));
 
+  /* ---------- Plans helper ---------- */
   const updatePlan = (i: number, patch: Partial<RatePlan>) =>
     setForm((f) => ({
       ...f,
-      ratePlans: f.ratePlans.map((p, idx) => (idx === i ? { ...p, ...patch } : p)),
+      ratePlans: f.ratePlans.map((p, idx) =>
+        idx === i ? { ...p, ...patch } : p
+      ),
     }));
 
   const next = () => setStep((s) => Math.min(s + 1, steps.length - 1));
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
+  /* ---------- Save ---------- */
   const saveAll = async () => {
     setSaving(true);
     setMsg(null);
@@ -117,7 +154,7 @@ export default function FreelancerOnboardingPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Failed to save");
       setMsg("Profile saved! Redirecting…");
-      setTimeout(() => router.push("/"), 900);
+      setTimeout(() => router.push("/freelancer/profile"), 900);
     } catch (e: any) {
       setErr(e.message || "Error");
     } finally {
@@ -125,6 +162,61 @@ export default function FreelancerOnboardingPage() {
     }
   };
 
+  /* ---------- Prefill existing profile in edit mode ---------- */
+  useEffect(() => {
+    if (!isEdit || bootstrapped) return;
+
+    (async () => {
+      try {
+        setLoadingExisting(true);
+        const res = await fetch("/api/freelancer/profile", {
+          cache: "no-store",
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.message || "Failed to load profile");
+
+        const p = json.profile || {};
+
+        setForm((f) => ({
+          ...f,
+          location: p.location || "",
+          profilePicture: p.profilePicture || "",
+          bio: p.bio || "",
+          category: p.category || "",
+          services: Array.isArray(p.services) ? p.services : [],
+          skills: Array.isArray(p.skills) ? p.skills : [],
+          portfolio: Array.isArray(p.portfolio)
+            ? p.portfolio.map((it: any) => ({
+                title: it?.title || "",
+                description: it?.description || "",
+                imageUrl: it?.imageUrl || "",
+                projectUrl: it?.projectUrl || "",
+              }))
+            : [],
+          ratePlans: normalizeRatePlans(p.ratePlans),
+          aboutThisGig: p.aboutThisGig || "",
+          whatIOffer: Array.isArray(p.whatIOffer) ? p.whatIOffer : [],
+          socialLinks: Array.isArray(p.socialLinks)
+            ? p.socialLinks.map((s: any) => ({
+                platform: s?.platform || "",
+                url: s?.url || "",
+              }))
+            : [],
+          languageProficiency: Array.isArray(p.languageProficiency)
+            ? p.languageProficiency
+            : [],
+        }));
+
+        setBootstrapped(true);
+      } catch (e) {
+        console.error("hydrate edit form error:", e);
+      } finally {
+        setLoadingExisting(false);
+      }
+    })();
+  }, [isEdit, bootstrapped]);
+
+  /* ---------- Derived UI bits ---------- */
   const previewSkills = useMemo(() => form.skills.slice(0, 6), [form.skills]);
   const serviceOptions = useMemo(
     () => (form.category ? servicesByCategory[form.category] || [] : []),
@@ -135,13 +227,14 @@ export default function FreelancerOnboardingPage() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-50">
-      
       {/* light emerald/cyan blobs */}
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -left-20 -top-24 h-72 w-72 rounded-full bg-emerald-200/40 blur-3xl" />
         <div className="absolute -right-16 -top-10 h-56 w-56 rounded-full bg-cyan-200/40 blur-3xl" />
         <div className="absolute -bottom-20 left-1/3 h-80 w-80 rounded-full bg-emerald-100/50 blur-3xl" />
       </div>
+
+      {/* Top-left logo */}
       <header className="absolute left-4 top-4 z-20">
         <a href="/" aria-label="Home" className="inline-block">
           <Image
@@ -170,11 +263,20 @@ export default function FreelancerOnboardingPage() {
         <div className="mb-6 flex flex-col items-start justify-between gap-4 md:flex-row md:items-center">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-              Hello, {userName || "Freelancer"} 👋
+              {isEdit
+                ? "Edit your profile"
+                : "Hello, " + (userName || "Freelancer") + " 👋"}
             </h1>
             <p className="mt-1 text-sm text-slate-600">
-              Let’s set up your professional profile.
+              {isEdit
+                ? "Update your professional profile."
+                : "Let’s set up your professional profile."}
             </p>
+            {loadingExisting && (
+              <div className="mt-2 text-xs text-slate-500">
+                Loading your existing details…
+              </div>
+            )}
           </div>
 
           <nav className="flex w-full items-center gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm md:w-auto">
@@ -187,11 +289,23 @@ export default function FreelancerOnboardingPage() {
                   key={s.key}
                   onClick={() => setStep(i)}
                   className={`group flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition
-                    ${active ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" :
-                      done ? "text-emerald-700 hover:bg-emerald-50" :
-                      "text-slate-600 hover:bg-slate-50"}`}
+                    ${
+                      active
+                        ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                        : done
+                        ? "text-emerald-700 hover:bg-emerald-50"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
                 >
-                  <Icon className={`h-4 w-4 ${active ? "text-emerald-600" : done ? "text-emerald-600" : "text-slate-500"}`} />
+                  <Icon
+                    className={`h-4 w-4 ${
+                      active
+                        ? "text-emerald-600"
+                        : done
+                        ? "text-emerald-600"
+                        : "text-slate-500"
+                    }`}
+                  />
                   <span className="hidden md:inline">{s.label}</span>
                 </button>
               );
@@ -220,10 +334,14 @@ export default function FreelancerOnboardingPage() {
                 >
                   {/* Location */}
                   <div className="grid gap-1">
-                    <label className="text-sm font-medium text-slate-700">Location</label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Location
+                    </label>
                     <input
                       value={form.location}
-                      onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, location: e.target.value }))
+                      }
                       className={inputClass}
                       placeholder="City, Country"
                     />
@@ -233,15 +351,21 @@ export default function FreelancerOnboardingPage() {
                   <ProfilePictureField
                     label="Profile picture"
                     value={form.profilePicture}
-                    onChange={(url) => setForm((f) => ({ ...f, profilePicture: url }))}
+                    onChange={(url) =>
+                      setForm((f) => ({ ...f, profilePicture: url }))
+                    }
                   />
 
                   {/* Bio */}
                   <div className="md:col-span-2 grid gap-1">
-                    <label className="text-sm font-medium text-slate-700">Bio</label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Bio
+                    </label>
                     <textarea
                       value={form.bio}
-                      onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, bio: e.target.value }))
+                      }
                       rows={4}
                       className={inputClass}
                       placeholder="Tell clients what you do best, your experience and what makes you unique."
@@ -250,7 +374,9 @@ export default function FreelancerOnboardingPage() {
 
                   {/* Category (select) */}
                   <div className="grid gap-1">
-                    <label className="text-sm font-medium text-slate-700">Category</label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Category
+                    </label>
                     <div className="relative">
                       <select
                         className={`${inputClass} appearance-none`}
@@ -271,7 +397,9 @@ export default function FreelancerOnboardingPage() {
                         ))}
                       </select>
                       {/* caret */}
-                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">▾</span>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                        ▾
+                      </span>
                     </div>
                     <p className="text-xs text-slate-500">
                       Choose the primary marketplace category for your services.
@@ -282,12 +410,19 @@ export default function FreelancerOnboardingPage() {
                   <div className="md:col-span-2 grid gap-2">
                     <div className="flex items-center justify-between">
                       <label className="text-sm font-medium text-slate-700">
-                        Services {form.category ? <span className="text-slate-500">({selectedCategoryLabel})</span> : null}
+                        Services{" "}
+                        {form.category ? (
+                          <span className="text-slate-500">
+                            ({selectedCategoryLabel})
+                          </span>
+                        ) : null}
                       </label>
                       {form.services.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => setForm((f) => ({ ...f, services: [] }))}
+                          onClick={() =>
+                            setForm((f) => ({ ...f, services: [] }))
+                          }
                           className="text-xs text-slate-600 hover:underline"
                         >
                           Clear all
@@ -303,17 +438,22 @@ export default function FreelancerOnboardingPage() {
                           onToggle={(service) =>
                             setForm((f) => {
                               const selected = new Set(f.services);
-                              if (selected.has(service)) selected.delete(service);
+                              if (selected.has(service))
+                                selected.delete(service);
                               else selected.add(service);
                               return { ...f, services: Array.from(selected) };
                             })
                           }
                         />
                       ) : (
-                        <div className="text-sm text-slate-500">No services available for this category.</div>
+                        <div className="text-sm text-slate-500">
+                          No services available for this category.
+                        </div>
                       )
                     ) : (
-                      <div className="text-sm text-slate-500">Select a category to choose services.</div>
+                      <div className="text-sm text-slate-500">
+                        Select a category to choose services.
+                      </div>
                     )}
                   </div>
                 </motion.div>
@@ -327,7 +467,8 @@ export default function FreelancerOnboardingPage() {
                   exit={{ opacity: 0, y: -8 }}
                 >
                   <label className="text-sm font-medium text-slate-700">
-                    Skills <span className="text-slate-500">(press Enter to add)</span>
+                    Skills{" "}
+                    <span className="text-slate-500">(press Enter to add)</span>
                   </label>
                   <TagInput
                     values={form.skills}
@@ -336,7 +477,9 @@ export default function FreelancerOnboardingPage() {
                     placeholder="React, Node, MongoDB"
                   />
                   <div className="mt-4">
-                    <label className="text-sm font-medium text-slate-700">Languages</label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Languages
+                    </label>
                     <TagInput
                       values={form.languageProficiency}
                       onAdd={(v) => addTag("languageProficiency", v)}
@@ -345,7 +488,9 @@ export default function FreelancerOnboardingPage() {
                     />
                   </div>
                   <div className="mt-4">
-                    <label className="text-sm font-medium text-slate-700">What I Offer</label>
+                    <label className="text-sm font-medium text-slate-700">
+                      What I Offer
+                    </label>
                     <TagInput
                       values={form.whatIOffer}
                       onAdd={(v) => addTag("whatIOffer", v)}
@@ -373,31 +518,42 @@ export default function FreelancerOnboardingPage() {
                   </button>
 
                   {form.portfolio.map((p, i) => (
-                    <div key={i} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div
+                      key={i}
+                      className="rounded-xl border border-slate-200 bg-white p-4"
+                    >
                       <div className="grid gap-3 md:grid-cols-2">
                         <input
                           className={inputClass}
                           placeholder="Title"
                           value={p.title}
-                          onChange={(e) => updatePortfolio(i, { title: e.target.value })}
+                          onChange={(e) =>
+                            updatePortfolio(i, { title: e.target.value })
+                          }
                         />
                         <input
                           className={inputClass}
                           placeholder="Project URL (optional)"
                           value={p.projectUrl || ""}
-                          onChange={(e) => updatePortfolio(i, { projectUrl: e.target.value })}
+                          onChange={(e) =>
+                            updatePortfolio(i, { projectUrl: e.target.value })
+                          }
                         />
-                        <input
-                          className={inputClass}
-                          placeholder="Image URL (optional)"
+                        <PortfolioImageField
+                          label="Portfolio image"
                           value={p.imageUrl || ""}
-                          onChange={(e) => updatePortfolio(i, { imageUrl: e.target.value })}
+                          onChange={(url) =>
+                            updatePortfolio(i, { imageUrl: url })
+                          }
+                          onClear={() => updatePortfolio(i, { imageUrl: "" })}
                         />
                         <textarea
                           className={`${inputClass} md:col-span-2`}
                           placeholder="Short description"
                           value={p.description}
-                          onChange={(e) => updatePortfolio(i, { description: e.target.value })}
+                          onChange={(e) =>
+                            updatePortfolio(i, { description: e.target.value })
+                          }
                         />
                       </div>
                       <div className="mt-2 text-right">
@@ -423,9 +579,14 @@ export default function FreelancerOnboardingPage() {
                   className="grid gap-4 md:grid-cols-3"
                 >
                   {form.ratePlans.map((plan, i) => (
-                    <div key={plan.type} className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div
+                      key={plan.type}
+                      className="rounded-xl border border-slate-200 bg-white p-4"
+                    >
                       <div className="mb-2 flex items-center justify-between">
-                        <h3 className="font-semibold text-slate-900">{plan.type}</h3>
+                        <h3 className="font-semibold text-slate-900">
+                          {plan.type}
+                        </h3>
                         <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 ring-1 ring-emerald-200">
                           {plan.deliveryDays}d / {plan.revisions} rev
                         </span>
@@ -435,7 +596,9 @@ export default function FreelancerOnboardingPage() {
                         type="number"
                         min={0}
                         value={plan.price}
-                        onChange={(e) => updatePlan(i, { price: +e.target.value })}
+                        onChange={(e) =>
+                          updatePlan(i, { price: +e.target.value })
+                        }
                         placeholder="Price"
                       />
                       <input
@@ -443,7 +606,9 @@ export default function FreelancerOnboardingPage() {
                         type="number"
                         min={1}
                         value={plan.deliveryDays}
-                        onChange={(e) => updatePlan(i, { deliveryDays: +e.target.value })}
+                        onChange={(e) =>
+                          updatePlan(i, { deliveryDays: +e.target.value })
+                        }
                         placeholder="Delivery days"
                       />
                       <input
@@ -451,30 +616,39 @@ export default function FreelancerOnboardingPage() {
                         type="number"
                         min={0}
                         value={plan.revisions}
-                        onChange={(e) => updatePlan(i, { revisions: +e.target.value })}
+                        onChange={(e) =>
+                          updatePlan(i, { revisions: +e.target.value })
+                        }
                         placeholder="Revisions"
                       />
                       <textarea
                         className={`${inputClass} mt-2`}
                         rows={3}
                         value={plan.description}
-                        onChange={(e) => updatePlan(i, { description: e.target.value })}
+                        onChange={(e) =>
+                          updatePlan(i, { description: e.target.value })
+                        }
                         placeholder="Short plan description"
                       />
                       <div className="mt-2">
                         <label className="text-xs font-medium text-slate-700">
-                          What’s included <span className="text-slate-500">(Enter to add)</span>
+                          What’s included{" "}
+                          <span className="text-slate-500">(Enter to add)</span>
                         </label>
                         <TagInput
                           values={plan.whatsIncluded}
                           onAdd={(v) =>
                             updatePlan(i, {
-                              whatsIncluded: Array.from(new Set([...plan.whatsIncluded, v])),
+                              whatsIncluded: Array.from(
+                                new Set([...plan.whatsIncluded, v])
+                              ),
                             })
                           }
                           onRemove={(v) =>
                             updatePlan(i, {
-                              whatsIncluded: plan.whatsIncluded.filter((x) => x !== v),
+                              whatsIncluded: plan.whatsIncluded.filter(
+                                (x) => x !== v
+                              ),
                             })
                           }
                           placeholder="Page design, API, tests"
@@ -482,20 +656,33 @@ export default function FreelancerOnboardingPage() {
                       </div>
                     </div>
                   ))}
+
                   <div className="md:col-span-3">
-                    <label className="text-sm font-medium text-slate-700">About this Gig</label>
+                    <label className="text-sm font-medium text-slate-700">
+                      About this Gig
+                    </label>
                     <textarea
                       className={`${inputClass} mt-1 w-full`}
                       rows={4}
                       value={form.aboutThisGig}
-                      onChange={(e) => setForm((f) => ({ ...f, aboutThisGig: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          aboutThisGig: e.target.value,
+                        }))
+                      }
                     />
                   </div>
+
                   <div className="md:col-span-3">
-                    <label className="text-sm font-medium text-slate-700">Social Links</label>
+                    <label className="text-sm font-medium text-slate-700">
+                      Social Links
+                    </label>
                     <SocialLinksEditor
                       values={form.socialLinks}
-                      onChange={(values) => setForm((f) => ({ ...f, socialLinks: values }))}
+                      onChange={(values) =>
+                        setForm((f) => ({ ...f, socialLinks: values }))
+                      }
                     />
                   </div>
                 </motion.div>
@@ -509,8 +696,12 @@ export default function FreelancerOnboardingPage() {
                   exit={{ opacity: 0, y: -8 }}
                 >
                   <p className="text-slate-700">
-                    Looks great! Review the live preview on the right. When ready, click{" "}
-                    <span className="font-semibold text-emerald-700">Save & Finish</span>.
+                    Looks great! Review the live preview on the right. When
+                    ready, click{" "}
+                    <span className="font-semibold text-emerald-700">
+                      Save & Finish
+                    </span>
+                    .
                   </p>
                 </motion.div>
               )}
@@ -595,7 +786,9 @@ export default function FreelancerOnboardingPage() {
                 </div>
 
                 {form.bio && (
-                  <p className="mt-4 line-clamp-4 text-sm text-slate-700">{form.bio}</p>
+                  <p className="mt-4 line-clamp-4 text-sm text-slate-700">
+                    {form.bio}
+                  </p>
                 )}
 
                 {previewSkills.length > 0 && (
@@ -645,7 +838,9 @@ export default function FreelancerOnboardingPage() {
                           key={p.type}
                           className="rounded-lg border border-slate-200 bg-slate-50 p-2 text-center"
                         >
-                          <div className="text-[11px] text-slate-600">{p.type}</div>
+                          <div className="text-[11px] text-slate-600">
+                            {p.type}
+                          </div>
                           <div className="text-sm font-semibold text-slate-900">
                             {p.price > 0 ? `$${p.price}` : "—"}
                           </div>
@@ -685,9 +880,11 @@ function ServiceMultiSelect({
               key={opt}
               onClick={() => onToggle(opt)}
               className={`rounded-full px-3 py-1 text-sm ring-1 transition
-                ${active
-                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                  : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"}`}
+                ${
+                  active
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                    : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"
+                }`}
               title={opt}
             >
               <span className="line-clamp-1">{opt}</span>
@@ -697,14 +894,15 @@ function ServiceMultiSelect({
       </div>
       {values.length > 0 && (
         <div className="mt-2 text-xs text-slate-500">
-          Selected: <span className="font-medium text-slate-700">{values.length}</span>
+          Selected:{" "}
+          <span className="font-medium text-slate-700">{values.length}</span>
         </div>
       )}
     </div>
   );
 }
 
-/* ----- small inputs ----- */
+/* ----- Tag Input ----- */
 function TagInput({
   values,
   onAdd,
@@ -755,6 +953,7 @@ function TagInput({
   );
 }
 
+/* ----- Social Links Editor ----- */
 function SocialLinksEditor({
   values,
   onChange,
@@ -765,8 +964,10 @@ function SocialLinksEditor({
   const inputClass =
     "rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 outline-none ring-emerald-500 focus:ring-2";
   const add = () => onChange([...(values || []), { platform: "", url: "" }]);
-  const update = (i: number, patch: Partial<{ platform: string; url: string }>) =>
-    onChange(values.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
+  const update = (
+    i: number,
+    patch: Partial<{ platform: string; url: string }>
+  ) => onChange(values.map((v, idx) => (idx === i ? { ...v, ...patch } : v)));
   const remove = (i: number) => onChange(values.filter((_, idx) => idx !== i));
 
   return (
@@ -811,7 +1012,15 @@ function SocialLinksEditor({
 function BasicIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" {...props}>
-      <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <rect
+        x="3"
+        y="4"
+        width="18"
+        height="14"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       <path d="M3 9h18" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
@@ -819,14 +1028,26 @@ function BasicIcon(props: React.SVGProps<SVGSVGElement>) {
 function StarIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" {...props}>
-      <path d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 18.9 6.2 20.8l1.1-6.4L2.6 9.8l6.5-.9L12 3z" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M12 3l2.9 5.9 6.5.9-4.7 4.6 1.1 6.4L12 18.9 6.2 20.8l1.1-6.4L2.6 9.8l6.5-.9L12 3z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
     </svg>
   );
 }
 function GalleryIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" {...props}>
-      <rect x="3" y="4" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <rect
+        x="3"
+        y="4"
+        width="18"
+        height="14"
+        rx="2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       <path d="M7 14l3-3 3 3 4-4 3 3" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
@@ -834,7 +1055,11 @@ function GalleryIcon(props: React.SVGProps<SVGSVGElement>) {
 function PackageIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" {...props}>
-      <path d="M3 7l9-4 9 4v10l-9 4-9-4V7z" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M3 7l9-4 9 4v10l-9 4-9-4V7z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       <path d="M12 3v18M3 7l9 4 9-4" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
@@ -842,7 +1067,11 @@ function PackageIcon(props: React.SVGProps<SVGSVGElement>) {
 function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="none" {...props}>
-      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"
+        stroke="currentColor"
+        strokeWidth="1.5"
+      />
       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );

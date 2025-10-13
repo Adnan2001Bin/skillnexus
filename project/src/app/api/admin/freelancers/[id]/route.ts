@@ -1,65 +1,56 @@
 // src/app/api/admin/freelancers/[id]/route.ts
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/connectDB";
-import FreelancerProfile from "@/models/freelancerProfile.model";
 import { categories } from "@/lib/freelance-categories";
-import { Types } from "mongoose";
 import { z } from "zod";
+import UserModel from "@/models/user.model";
 
 const CATEGORY_MAP = new Map(categories.map((c) => [c.value, c.label]));
-
-type PopulatedFreelancerLean = {
-  _id: Types.ObjectId;
-  user:
-    | Types.ObjectId
-    | {
-        _id: Types.ObjectId;
-        userName: string;
-        email: string;
-      };
-  location?: string | null;
-  profilePicture?: string | null;
-  bio?: string | null;
-  category?: string | null;
-  services?: string[];
-  skills?: string[];
-  ratePlans?: Array<{ type: string; price: number }>;
-  portfolio?: Array<any>;
-  approvalStatus: "pending" | "approved" | "rejected";
-  rejectionReason?: string | null;
-  reviewedAt?: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
 
 // --- GET (view one) ---
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   await connectDB();
   try {
-    const p = await FreelancerProfile.findById(params.id)
-      .populate<{ user: { _id: Types.ObjectId; userName: string; email: string } }>(
-        "user",
-        "userName email"
-      )
-      .lean<PopulatedFreelancerLean>();
+    const p = await UserModel.findById(params.id)
+      .select([
+        "userName",
+        "email",
+        "role",
+        "location",
+        "profilePicture",
+        "bio",
+        "category",
+        "services",
+        "skills",
+        "ratePlans",
+        "portfolio",
+        "aboutThisGig",
+        "whatIOffer",
+        "socialLinks",
+        "languageProficiency",
+        "approvalStatus",
+        "rejectionReason",
+        "reviewedAt",
+        "createdAt",
+        "updatedAt",
+      ].join(" "))
+      .lean();
 
-    if (!p) {
+    if (!p || p.role !== "freelancer") {
       return NextResponse.json({ success: false, message: "Profile not found" }, { status: 404 });
     }
 
     const categoryLabel = p.category ? CATEGORY_MAP.get(p.category) ?? p.category : null;
-    const isPopUser = typeof p.user === "object" && p.user !== null && "_id" in p.user;
 
+    // Shape it to what your UI expects
     const profile = {
       ...p,
       _id: String(p._id),
-      user: isPopUser
-        ? {
-            _id: String((p.user as any)._id),
-            userName: (p.user as any).userName,
-            email: (p.user as any).email,
-          }
-        : null,
+      user: {
+        _id: String(p._id),
+        userName: p.userName,
+        email: p.email,
+      },
       categoryLabel,
     };
 
@@ -82,8 +73,8 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     const body = await req.json();
     const { action, reason } = PatchSchema.parse(body);
 
-    const p = await FreelancerProfile.findById(params.id);
-    if (!p) {
+    const p = await UserModel.findById(params.id);
+    if (!p || p.role !== "freelancer") {
       return NextResponse.json({ success: false, message: "Profile not found" }, { status: 404 });
     }
 
@@ -91,7 +82,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       p.approvalStatus = "approved";
       p.rejectionReason = null;
       p.reviewedAt = new Date();
-    } else if (action === "reject") {
+    } else {
       p.approvalStatus = "rejected";
       p.rejectionReason = reason || null;
       p.reviewedAt = new Date();
@@ -100,22 +91,29 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     await p.save();
     return NextResponse.json({ success: true, message: "Updated" }, { status: 200 });
   } catch (e: any) {
-    if (e instanceof z.ZodError) {
-      return NextResponse.json({ success: false, message: e.issues.map(i => i.message).join(", ") }, { status: 400 });
+    if (e?.name === "ZodError") {
+      return NextResponse.json(
+        { success: false, message: e.issues.map((i: any) => i.message).join(", ") },
+        { status: 400 }
+      );
     }
     console.error("PATCH /api/admin/freelancers/[id] error", e);
     return NextResponse.json({ success: false, message: "Failed to update" }, { status: 500 });
   }
 }
 
-// --- DELETE (remove profile) ---
+// --- DELETE (remove profile / account) ---
+// Currently deletes the whole User document (your Option B behavior for that user id).
+// If you want "Delete profile only" semantics, you'd instead clear freelancer fields.
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   await connectDB();
   try {
-    const p = await FreelancerProfile.findByIdAndDelete(params.id);
-    if (!p) {
+    const p = await UserModel.findById(params.id);
+    if (!p || p.role !== "freelancer") {
       return NextResponse.json({ success: false, message: "Profile not found" }, { status: 404 });
     }
+
+    await UserModel.findByIdAndDelete(params.id);
     return NextResponse.json({ success: true, message: "Deleted" }, { status: 200 });
   } catch (e) {
     console.error("DELETE /api/admin/freelancers/[id] error", e);

@@ -3,9 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import connectDB from "@/lib/connectDB";
 import UserModel from "@/models/user.model";
-import FreelancerProfile from "@/models/freelancerProfile.model";
 
-// If you can import these from your shared constants, do that instead:
 const CATEGORY_VALUES = [
   "programming_tech",
   "graphics_design",
@@ -17,11 +15,12 @@ const CATEGORY_VALUES = [
   "consulting",
 ] as const;
 
+// Option A: strict to match typical Mongoose "required" intent
 const RatePlan = z.object({
   type: z.enum(["Basic", "Standard", "Premium"]),
   price: z.number().min(0),
-  description: z.string().trim().optional().default(""),
-  whatsIncluded: z.array(z.string().trim()).optional().default([]),
+  description: z.string().trim().min(1, "Description is required"),
+  whatsIncluded: z.array(z.string().trim().min(1)).min(1, "At least 1 item"),
   deliveryDays: z.number().min(1),
   revisions: z.number().min(0),
 });
@@ -41,7 +40,6 @@ const FreelancerSchema = z.object({
   category: z.enum(CATEGORY_VALUES).optional(),
   services: z.array(z.string().trim()).optional().default([]),
 
-  // free-form collections — default to [] so partial saves don't fail
   skills: z.array(z.string().trim()).optional().default([]),
   languageProficiency: z.array(z.string().trim()).optional().default([]),
   whatIOffer: z.array(z.string().trim()).optional().default([]),
@@ -50,14 +48,11 @@ const FreelancerSchema = z.object({
     .optional()
     .default([]),
 
-  // portfolio and packages can be empty while drafting
   portfolio: z.array(PortfolioItem).optional().default([]),
   ratePlans: z.array(RatePlan).optional().default([]),
-
   aboutThisGig: z.string().trim().max(1500).optional().default(""),
 });
 
-// Small helper to defensively clean arrays
 function distinctStrings(arr: string[] | undefined) {
   return Array.from(new Set((arr || []).map((s) => s.trim()).filter(Boolean)));
 }
@@ -66,11 +61,9 @@ export async function POST(req: Request) {
   try {
     await connectDB();
 
-    // Parse & normalize
     const raw = await req.json();
 
-    // Coerce some numeric strings just in case (defensive)
-    // (Only needed if you aren’t already sending numbers from the client)
+    // defensive coercion if inputs arrive as strings
     if (Array.isArray(raw?.ratePlans)) {
       raw.ratePlans = raw.ratePlans.map((p: any) => ({
         ...p,
@@ -82,10 +75,9 @@ export async function POST(req: Request) {
       }));
     }
 
-    // Validate with Zod
     const data = FreelancerSchema.parse(raw);
 
-    // Look up user
+    // IMPORTANT: in prod, get the user from session/JWT, not from body.email
     const email = data.email.toLowerCase();
     const user = await UserModel.findOne({ email });
     if (!user) {
@@ -101,30 +93,23 @@ export async function POST(req: Request) {
       );
     }
 
-    // Final sanitize (remove empty portfolio items that might slip in)
     const portfolio = (data.portfolio || []).filter(
       (p) => p.title?.trim() && p.description?.trim()
     );
 
-    // Ensure distinct tag-like arrays
+    const services = distinctStrings(data.services);
     const skills = distinctStrings(data.skills);
     const languageProficiency = distinctStrings(data.languageProficiency);
     const whatIOffer = distinctStrings(data.whatIOffer);
-    const services = distinctStrings(data.services);
 
-    // Upsert profile
-    await FreelancerProfile.findOneAndUpdate(
-      { user: user._id },
+    await UserModel.findOneAndUpdate(
+      { _id: user._id }, // <-- FIXED: update this user doc
       {
-        user: user._id,
         location: data.location || null,
         profilePicture: data.profilePicture || null,
         bio: data.bio || null,
-
-        // NEW: category + services
         category: data.category || null,
         services,
-
         skills,
         portfolio,
         ratePlans: data.ratePlans || [],
@@ -133,7 +118,7 @@ export async function POST(req: Request) {
         socialLinks: data.socialLinks || [],
         languageProficiency,
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { new: true } // upsert not needed for existing user
     );
 
     return NextResponse.json(

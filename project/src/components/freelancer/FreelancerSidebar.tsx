@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  User,            // <-- NEW (icon for Profile)
   Briefcase,
   Mail,
   Wallet,
@@ -14,22 +15,101 @@ import {
 } from "lucide-react";
 import { Images } from "@/lib/images";
 import { useSession, signOut } from "next-auth/react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Props = { open: boolean; onClose: () => void };
 
+// Added "Profile" entry right after Dashboard
 const nav = [
   { href: "/freelancer/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/freelancer/projects", label: "Projects", icon: Briefcase },
-  { href: "/freelancer/messages", label: "Messages", icon: Mail },
-  { href: "/freelancer/earnings", label: "Earnings", icon: Wallet },
-  { href: "/freelancer/settings", label: "Settings", icon: Settings },
+  { href: "/freelancer/profile",   label: "Profile",   icon: User },          // <-- NEW
+  { href: "/freelancer/projects",  label: "Projects",  icon: Briefcase },
+  { href: "/freelancer/messages",  label: "Messages",  icon: Mail },
+  { href: "/freelancer/earnings",  label: "Earnings",  icon: Wallet },
+  { href: "/freelancer/settings",  label: "Settings",  icon: Settings },
 ];
+
+type MeResponse = {
+  success: boolean;
+  profile?: {
+    profilePicture?: string | null;
+    user?: { userName?: string; email?: string };
+  };
+  user?: { userName?: string; email?: string; profilePicture?: string | null };
+  message?: string;
+};
 
 export default function FreelancerSidebar({ open, onClose }: Props) {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const user = session?.user;
+
+  // What we actually render in the footer card
+  const [avatar, setAvatar] = useState<string>("/images/avatar-placeholder.png");
+  const [displayName, setDisplayName] = useState<string>("");
+  const [email, setEmail] = useState<string>("");
+
+  // Seed from session immediately so we don't flash blank
+  useEffect(() => {
+    const su = session?.user as any | undefined;
+    if (!su) return;
+
+    const seedName = su.userName || su.name || su.email || "";
+    const seedEmail = su.email || "";
+    const seedAvatar =
+      su.profilePicture ||
+      (typeof su.image === "string" ? su.image : "") ||
+      "/images/avatar-placeholder.png";
+
+    setDisplayName((prev) => prev || seedName);
+    setEmail((prev) => prev || seedEmail);
+    setAvatar((prev) => (prev && prev !== "/images/avatar-placeholder.png" ? prev : seedAvatar));
+  }, [session]);
+
+  // Then fetch the freelancer profile to get the *true* profilePicture
+  useEffect(() => {
+    const role = (session?.user as any)?.role;
+    if (role !== "freelancer") return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        // Use the unified user-based endpoint
+        const res = await fetch("/api/freelancer/profile", { cache: "no-store" });
+        const json: MeResponse = await res.json();
+        if (!res.ok) throw new Error(json?.message || "Failed to load profile");
+        if (cancelled) return;
+
+        const profPic =
+          json.profile?.profilePicture ??
+          json.user?.profilePicture ??
+          "/images/avatar-placeholder.png";
+
+        const name =
+          json.profile?.user?.userName ??
+          json.user?.userName ??
+          (session?.user as any)?.userName ??
+          (session?.user as any)?.name ??
+          (session?.user as any)?.email ??
+          "";
+
+        const mail =
+          (json as any)?.profile?.user?.email ??
+          json.user?.email ??
+          (session?.user as any)?.email ??
+          "";
+
+        setAvatar(profPic || "/images/avatar-placeholder.png");
+        setDisplayName(name || "");
+        setEmail(mail || "");
+      } catch {
+        // ignore (we already have session fallbacks)
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session]);
 
   const handleLogout = useCallback(async () => {
     await signOut({ callbackUrl: "/sign-in" });
@@ -39,6 +119,8 @@ export default function FreelancerSidebar({ open, onClose }: Props) {
     "flex items-center gap-3 rounded-xl px-3 py-2 text-sm transition focus:outline-none";
   const activeItem = "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200";
   const idleItem = "text-slate-600 hover:bg-slate-50";
+
+  const links = useMemo(() => nav, []);
 
   return (
     <>
@@ -73,7 +155,7 @@ export default function FreelancerSidebar({ open, onClose }: Props) {
 
         {/* Nav */}
         <nav className="space-y-1">
-          {nav.map(({ href, label, icon: Icon }) => {
+          {links.map(({ href, label, icon: Icon }) => {
             const active = pathname?.startsWith(href);
             return (
               <Link
@@ -96,24 +178,21 @@ export default function FreelancerSidebar({ open, onClose }: Props) {
         {/* Footer: user + logout */}
         <div className="mt-auto">
           <div className="my-6 h-px w-full bg-slate-200" />
-          {user && (
-            <div className="mb-2 flex items-center gap-3 rounded-lg bg-slate-50 p-2">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={(user as any)?.image || "/avatar-placeholder.png"}
-                alt={user.name ?? "User"}
-                className="h-8 w-8 rounded-full object-cover ring-1 ring-slate-200"
-              />
-              <div className="min-w-0">
-                <div className="truncate text-sm font-medium text-slate-800">
-                  {user.userName ?? user.email}
-                </div>
-                <div className="truncate text-xs text-slate-500">{user.email}</div>
+          <div className="mb-2 flex items-center gap-3 rounded-lg bg-slate-50 p-2">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={avatar || "/images/avatar-placeholder.png"}
+              alt={displayName || email || "User"}
+              className="h-8 w-8 rounded-full object-cover ring-1 ring-slate-200"
+            />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-slate-800">
+                {displayName || email || "—"}
               </div>
+              <div className="truncate text-xs text-slate-500">{email || " "}</div>
             </div>
-          )}
+          </div>
 
-          {/* Logout button */}
           <button
             onClick={handleLogout}
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-slate-900"

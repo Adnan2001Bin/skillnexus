@@ -2,40 +2,63 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getToken } from "next-auth/jwt";
 
-// Change these if your paths differ
+// Zones
 const ADMIN_PREFIX = "/admin";
 const FREELANCER_PREFIX = "/freelancer";
 
-// Public routes that never need auth (add more if needed)
+// Public routes that don't require auth
 const PUBLIC_PATHS = [
-  "/", 
-  "/api",                 // let API decide its own auth
-  "/sign-in",
-  "/sign-up",
+  "/api",          // let API handle its own auth
   "/verify",
-  "/onboarding",     // if you allow onboarding pre-login, otherwise remove
+  "/onboarding",
   "/favicon.ico",
-  "/_next",               // next assets
+  "/_next",
   "/images",
 ];
 
+// "Entry" pages: if a logged-in user lands here, redirect by role
+const ENTRY_PATHS = ["/", "/sign-in", "/sign-up"];
+
 function isPublic(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+function isEntry(pathname: string) {
+  return ENTRY_PATHS.includes(pathname);
 }
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Skip static / public assets
-  if (isPublic(pathname)) return NextResponse.next();
-
-  // Try to read the NextAuth token (requires NEXTAUTH_SECRET)
+  // Read the NextAuth token first (requires NEXTAUTH_SECRET)
   const token = await getToken({ req });
+  const role = (token as any)?.role as "admin" | "freelancer" | "client" | undefined;
 
-  // If hitting protected zones without token → go to sign-in
+  // 1) If logged in and on an entry page → redirect by role
+  if (token && isEntry(pathname)) {
+    const redirectMap: Record<string, string> = {
+      freelancer: "/freelancer/dashboard",
+      admin: "/admin/dashboard",
+      client: "/home",
+    };
+    const dest = redirectMap[role || ""] || "/"; // fallback just in case
+    if (dest !== pathname) {
+      const url = req.nextUrl.clone();
+      url.pathname = dest;
+      url.search = ""; // drop any sign-in/sign-up query params
+      return NextResponse.redirect(url);
+    }
+  }
+
+  // 2) Allow public assets/pages through (except the entry paths above which we handled)
+  if (isPublic(pathname)) {
+    return NextResponse.next();
+  }
+
+  // 3) Gate the protected zones
   const isAdminArea = pathname.startsWith(ADMIN_PREFIX);
   const isFreelancerArea = pathname.startsWith(FREELANCER_PREFIX);
 
+  // Not logged in but trying to access protected zones → go to sign-in
   if (!token && (isAdminArea || isFreelancerArea)) {
     const url = req.nextUrl.clone();
     url.pathname = "/sign-in";
@@ -43,21 +66,16 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If we have a token, enforce role
+  // 4) Enforce role per zone
   if (token) {
-    const role = (token as any).role as string | undefined;
-
-    // admin zone requires role === "admin"
     if (isAdminArea && role !== "admin") {
       const url = req.nextUrl.clone();
-      url.pathname = "/"; // or "/freelancer/dashboard"
+      url.pathname = "/";
       return NextResponse.redirect(url);
     }
-
-    // freelancer zone requires role === "freelancer"
     if (isFreelancerArea && role !== "freelancer") {
       const url = req.nextUrl.clone();
-      url.pathname = "/"; // or "/admin/dashboard"
+      url.pathname = "/";
       return NextResponse.redirect(url);
     }
   }
