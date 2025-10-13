@@ -1,8 +1,9 @@
+import Banner from '@/components/client/banner'
 import React from 'react'
 
 const page = () => {
   return (
-    <div>page</div>
+    <div><Banner /></div>
   )
 }
 
