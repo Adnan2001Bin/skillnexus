@@ -43,7 +43,7 @@ export default function ClientOnboardingPage() {
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Failed to save");
       setMsg("Profile saved! Redirecting…");
-      setTimeout(() => router.push("/"), 800);
+      setTimeout(() => router.push("/sign-in"), 800);
     } catch (e: any) {
       setErr(e.message || "Error");
     } finally {

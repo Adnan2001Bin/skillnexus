@@ -1,165 +1,312 @@
 "use client";
 
-import { useState } from "react";
+import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
-import { Images } from "@/lib/images"; // make sure Images.logo is defined
+import { usePathname, useRouter } from "next/navigation";
+import { useSession, signOut } from "next-auth/react";
+import { Bell, Menu, MessageSquare, Settings, LogOut, User, Plus, Search } from "lucide-react";
 
-type NavItem = { href: string; label: string };
+// shadcn/ui
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-const CLIENT_LINKS: NavItem[] = [
-  { href: "/client/dashboard", label: "Dashboard" },
-  { href: "/client/projects", label: "Projects" },
+import { Images } from "@/lib/images";
+
+type LinkItem = { href: string; label: string };
+
+const links: LinkItem[] = [
+  { href: "/home", label: "Home" },
+  { href: "/client/find", label: "Find talent" }, // NEW
+  { href: "/client/jobs", label: "Jobs" },        // NEW
   { href: "/client/messages", label: "Messages" },
-  { href: "/client/settings", label: "Settings" },
 ];
 
-export function ClientNavbar() {
+export default function ClientNavbar() {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const router = useRouter();
+  const { data: session, status } = useSession();
+  const isAuthed = status === "authenticated";
 
-  const isActive = (href: string) =>
-    pathname === href || pathname?.startsWith(href + "/");
+  const user: any = session?.user || {};
+  const avatar =
+    user?.profilePicture ||
+    (typeof user?.image === "string" ? user.image : "") ||
+    "/images/avatar-placeholder.png";
+  const displayName = user?.userName || user?.name || user?.email?.split("@")?.[0] || "You";
+
+  const [q, setQ] = React.useState("");
+
+  // scroll state -> toggles transparent vs solid styles
+  const [scrolled, setScrolled] = React.useState(false);
+  React.useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const onSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!q.trim()) return;
+    router.push(`/client/find?q=${encodeURIComponent(q.trim())}`);
+  };
+
+  const colorClasses = scrolled
+    ? {
+        header: "bg-white/90 backdrop-blur border-b border-slate-200",
+        link: "text-slate-700 hover:bg-slate-100",
+        active: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
+        icon: "text-slate-700",
+        cta: "bg-emerald-600 text-white hover:bg-emerald-700",
+        input: "",
+        logoFilter: "",
+      }
+    : {
+        header: "bg-transparent",
+        link: "text-white/90 hover:bg-white/10",
+        active: "bg-white/15 text-white ring-1 ring-white/30",
+        icon: "text-white",
+        cta: "bg-white text-slate-900 hover:bg-white/90",
+        input: "bg-white/10 placeholder:text-white/60 text-white border-white/20 focus:ring-white/50",
+        logoFilter: "brightness-0 invert",
+      };
+
+  const NavLinks = ({ onClick }: { onClick?: () => void }) => (
+    <nav className="hidden items-center gap-1 md:flex">
+      {links.map((l) => {
+        const active = pathname === l.href || pathname?.startsWith(l.href + "/");
+        return (
+          <Link
+            key={l.href}
+            href={l.href}
+            onClick={onClick}
+            className={[
+              "rounded-lg px-3 py-2 text-sm transition",
+              active ? colorClasses.active : colorClasses.link,
+            ].join(" ")}
+          >
+            {l.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-3 md:px-6">
-        {/* Left: Logo */}
-        <div className="flex items-center gap-2">
-          <Link href="/" aria-label="Home" className="flex items-center">
-            <Image
-              src={Images.logo}
-              alt="Logo"
-              width={132}
-              height={36}
-              className="object-contain"
-              priority
-            />
-          </Link>
+    <header
+      className={[
+        "sticky top-0 z-50 w-full transition-colors",
+        colorClasses.header,
+        scrolled ? "" : "border-b-0",
+      ].join(" ")}
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-3 md:gap-4 md:px-6">
+        {/* Left: Mobile menu */}
+        <div className="md:hidden">
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label="Open menu">
+                <Menu className={`h-5 w-5 ${colorClasses.icon}`} />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="w-80">
+              <SheetHeader>
+                <SheetTitle className="flex items-center gap-2">
+                  <Image
+                    src={Images.logo}
+                    alt="Logo"
+                    width={120}
+                    height={32}
+                    className="h-8 w-auto object-contain"
+                  />
+                </SheetTitle>
+              </SheetHeader>
+              <div className="mt-4 space-y-1">
+                {links.map((l) => {
+                  const active = pathname === l.href || pathname?.startsWith(l.href + "/");
+                  return (
+                    <Link
+                      key={l.href}
+                      href={l.href}
+                      className={[
+                        "block rounded-lg px-3 py-2 text-sm",
+                        active
+                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                          : "text-slate-700 hover:bg-slate-50",
+                      ].join(" ")}
+                    >
+                      {l.label}
+                    </Link>
+                  );
+                })}
+                <div className="pt-2">
+                  {isAuthed ? (
+                    <Button asChild className="w-full">
+                      <Link href="/client/post-job">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Post a job
+                      </Link>
+                    </Button>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <Button asChild variant="outline">
+                        <Link href="/sign-in">Sign in</Link>
+                      </Button>
+                      <Button asChild>
+                        <Link href="/sign-up">Sign up</Link>
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
 
-        {/* Center: Desktop Links */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {CLIENT_LINKS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`rounded-lg px-3 py-2 text-sm transition ${
-                isActive(item.href)
-                  ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                  : "text-slate-600 hover:bg-slate-50"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        {/* Logo */}
+        <Link href="/home" className="flex items-center gap-2">
+          <Image
+            src={Images.logo}
+            alt="Logo"
+            width={140}
+            height={36}
+            className={`hidden h-9 w-auto object-contain sm:block ${scrolled ? "" : colorClasses.logoFilter}`}
+            priority
+          />
+          <Image
+            src={Images.logo}
+            alt="Logo"
+            width={110}
+            height={32}
+            className={`block h-8 w-auto object-contain sm:hidden ${scrolled ? "" : colorClasses.logoFilter}`}
+            priority
+          />
+        </Link>
 
-        {/* Right: Actions */}
-        <div className="flex items-center gap-2 md:gap-3">
-          {/* Search (optional) */}
-          <div className="hidden items-center rounded-lg border border-slate-200 bg-white pl-2 pr-3 md:flex">
-            <svg
-              className="mr-2 h-4 w-4 text-slate-400"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <circle cx="11" cy="11" r="7" />
-              <path d="M20 20l-3-3" />
-            </svg>
-            <input
-              placeholder="Search..."
-              className="h-8 w-40 bg-transparent text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none"
-            />
-          </div>
-
-          {/* Avatar placeholder */}
-          <Link
-            href="/client/settings"
-            className="hidden h-8 w-8 items-center justify-center overflow-hidden rounded-full ring-1 ring-slate-200 md:flex"
-            title="Account"
-          >
-            {/* Replace with user avatar if available */}
-            <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-500">
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" />
-                <path d="M4 20a8 8 0 0116 0" stroke="currentColor" strokeWidth="1.5" />
-              </svg>
+        {/* Center: nav + search */}
+        <div className="flex flex-1 items-center gap-3">
+          <NavLinks />
+          <form onSubmit={onSearch} className="ml-auto hidden max-w-md flex-1 md:block">
+            <div className="relative">
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search freelancers, skills, services…"
+                className={["pl-9", colorClasses.input].join(" ")}
+              />
+              <Search
+                className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${colorClasses.icon}`}
+              />
             </div>
-          </Link>
+          </form>
+        </div>
 
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setOpen((s) => !s)}
-            className="inline-flex items-center rounded-lg border border-slate-200 p-2 md:hidden"
-            aria-label="Toggle menu"
-          >
-            <svg
-              className="h-5 w-5 text-slate-700"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-            >
-              {open ? (
-                <path d="M6 18L18 6M6 6l12 12" />
-              ) : (
-                <>
-                  <path d="M4 6h16" />
-                  <path d="M4 12h16" />
-                  <path d="M4 18h16" />
-                </>
-              )}
-            </svg>
-          </button>
+        {/* Right: actions (authed vs guest) */}
+        <div className="flex items-center gap-2 md:gap-3">
+          {isAuthed ? (
+            <>
+              <Button asChild className={colorClasses.cta + " hidden md:inline-flex"}>
+                <Link href="/client/post-job">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Post a job
+                </Link>
+              </Button>
+
+              <Button variant="ghost" size="icon" asChild aria-label="Messages">
+                <Link href="/client/messages">
+                  <MessageSquare className={`h-5 w-5 ${colorClasses.icon}`} />
+                </Link>
+              </Button>
+
+              <Button variant="ghost" size="icon" asChild aria-label="Notifications">
+                <Link href="/client/notifications">
+                  <Bell className={`h-5 w-5 ${colorClasses.icon}`} />
+                </Link>
+              </Button>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="inline-flex items-center gap-2 rounded-full p-1 outline-none ring-offset-2 focus:ring-2 focus:ring-emerald-500"
+                    aria-label="Account menu"
+                  >
+                    <Avatar className="h-8 w-8 ring-1 ring-slate-200">
+                      <AvatarImage src={avatar} alt={displayName} />
+                      <AvatarFallback>{displayName?.slice(0, 1)?.toUpperCase() ?? "U"}</AvatarFallback>
+                    </Avatar>
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuLabel>
+                    <div className="truncate font-medium">{displayName}</div>
+                    <div className="truncate text-xs text-slate-500">{user?.email}</div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                    <Link href="/client/profile" className="flex items-center">
+                      <User className="mr-2 h-4 w-4" />
+                      <span>Profile</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/client/settings" className="flex items-center">
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => signOut({ callbackUrl: "/sign-in" })}
+                    className="text-red-600 focus:text-red-600"
+                  >
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Log out</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : (
+            <>
+              <Button variant={scrolled ? "outline" : "secondary"} asChild>
+                <Link href="/sign-in">Sign in</Link>
+              </Button>
+              <Button className={colorClasses.cta} asChild>
+                <Link href="/sign-up">Sign up</Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* Mobile sheet */}
-      {open && (
-        <div className="border-t border-slate-200 bg-white md:hidden">
-          <nav className="mx-auto flex max-w-7xl flex-col px-3 py-2">
-            {CLIENT_LINKS.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={`rounded-lg px-3 py-2 text-sm transition ${
-                  isActive(item.href)
-                    ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-                    : "text-slate-700 hover:bg-slate-50"
-                }`}
-              >
-                {item.label}
-              </Link>
-            ))}
-
-            <div className="mt-2 flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2">
-              <div className="flex items-center gap-2 text-sm text-slate-700">
-                <div className="flex h-7 w-7 items-center justify-center overflow-hidden rounded-full ring-1 ring-slate-200">
-                  <div className="flex h-full w-full items-center justify-center bg-slate-100 text-slate-500">
-                    <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="8" r="4" stroke="currentColor" strokeWidth="1.5" />
-                      <path d="M4 20a8 8 0 0116 0" stroke="currentColor" strokeWidth="1.5" />
-                    </svg>
-                  </div>
-                </div>
-                <span>Account</span>
-              </div>
-              <Link
-                href="/client/settings"
-                onClick={() => setOpen(false)}
-                className="text-sm font-medium text-emerald-700"
-              >
-                Manage
-              </Link>
-            </div>
-          </nav>
-        </div>
-      )}
+      {/* Mobile search under bar */}
+      <div className="block px-3 py-2 md:hidden">
+        <form onSubmit={onSearch}>
+          <div className="relative">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search freelancers, skills, services…"
+              className={["pl-9", scrolled ? "" : colorClasses.input].join(" ")}
+            />
+            <Search
+              className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${
+                scrolled ? "text-slate-500" : "text-white"
+              }`}
+            />
+          </div>
+        </form>
+      </div>
     </header>
   );
 }
