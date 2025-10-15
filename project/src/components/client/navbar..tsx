@@ -3,42 +3,24 @@
 import * as React from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
-  Bell,
-  Menu,
-  MessageSquare,
-  Settings,
-  LogOut,
-  User,
-  Plus,
-  Briefcase,
-  Users,
+  Bell, Menu, MessageSquare, Settings, LogOut, User, Plus, Briefcase, Users
 } from "lucide-react";
 
-// shadcn/ui
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
+  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Images } from "@/lib/images";
 
 type LinkItem = { href: string; label: string; icon?: React.ReactNode };
-
 const publicLinks: LinkItem[] = [
   { href: "/find-freelancers", label: "Find Freelancers", icon: <Users className="h-4 w-4" /> },
   { href: "/jobs", label: "Jobs", icon: <Briefcase className="h-4 w-4" /> },
@@ -47,43 +29,90 @@ const publicLinks: LinkItem[] = [
 
 export default function ClientNavbar() {
   const pathname = usePathname();
+  const router = useRouter();
   const { data: session, status } = useSession();
-
   const isAuthed = status === "authenticated";
-  const user: any = session?.user || {};
-  const avatar =
-    user?.profilePicture ||
-    (typeof user?.image === "string" ? user.image : "") ||
-    "/images/avatar-placeholder.png";
+
+  // —— NEW: fetch client profile for avatar ——
+  const [clientProfile, setClientProfile] = React.useState<{
+    userName?: string;
+    email?: string;
+    profilePicture?: string | null;
+  } | null>(null);
+
+  React.useEffect(() => {
+    if (!isAuthed) {
+      setClientProfile(null);
+      return;
+    }
+    (async () => {
+      try {
+        const res = await fetch("/api/client", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        if (json?.success && json?.data) {
+          setClientProfile({
+            userName: json.data.userName,
+            email: json.data.email,
+            profilePicture: json.data.profilePicture ?? null,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to load client /me", e);
+      }
+    })();
+  }, [isAuthed]);
+
+  const sessionUser: any = session?.user || {};
   const displayName =
-    user?.userName || user?.name || user?.email?.split("@")?.[0] || "You";
+    clientProfile?.userName ||
+    sessionUser?.userName ||
+    sessionUser?.name ||
+    sessionUser?.email?.split("@")?.[0] ||
+    "You";
 
+  const avatarSrc =
+    clientProfile?.profilePicture ||
+    sessionUser?.profilePicture ||
+    (typeof sessionUser?.image === "string" ? sessionUser.image : "") ||
+    "/images/avatar-placeholder.png";
+
+  // scroll style control + solid on detail
   const [scrolled, setScrolled] = React.useState(false);
-
-  // transparent -> solid on scroll
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+  const isFreelancerDetail =
+    pathname?.startsWith("/find-freelancers/") &&
+    pathname.split("/").filter(Boolean).length === 2;
+  const solidNav = isFreelancerDetail || scrolled;
 
-  // styles that flip with scroll
+  // gated nav
+  const gated = new Set<string>(["/find-freelancers", "/jobs", "/client/messages"]);
+  const go = (href: string) => {
+    if (!isAuthed && gated.has(href)) {
+      router.push(`/sign-in?callbackUrl=${encodeURIComponent(href)}`);
+      return;
+    }
+    router.push(href);
+  };
+
   const navWrap =
     "fixed top-0 z-50 w-full transition-colors duration-300 " +
-    (scrolled ? "bg-white text-slate-800 shadow" : "bg-transparent text-white");
+    (solidNav ? "bg-white text-slate-800 shadow" : "bg-transparent text-white");
   const linkBase = "rounded-lg px-3 py-2 text-sm transition";
-  const linkIdle = scrolled
-    ? "text-slate-700 hover:bg-slate-100"
-    : "text-white/90 hover:bg-white/10";
-  const linkActive = scrolled
+  const linkIdle = solidNav ? "text-slate-700 hover:bg-slate-100" : "text-white/90 hover:bg-white/10";
+  const linkActive = solidNav
     ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
     : "bg-white/15 text-white ring-1 ring-white/30";
 
   return (
     <header className={navWrap}>
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-3 md:gap-4 md:px-6">
-        {/* Left: Mobile menu */}
+        {/* Mobile menu */}
         <div className="md:hidden">
           <Sheet>
             <SheetTrigger asChild>
@@ -95,7 +124,7 @@ export default function ClientNavbar() {
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2">
                   <Image
-                    src={scrolled ? Images.logo : Images.logo1}
+                    src={solidNav ? Images.logo : Images.logo1}
                     alt="Logo"
                     width={120}
                     height={32}
@@ -108,18 +137,18 @@ export default function ClientNavbar() {
                 {publicLinks.map((l) => {
                   const active = pathname === l.href || pathname?.startsWith(l.href + "/");
                   return (
-                    <Link
+                    <button
                       key={l.href}
-                      href={l.href}
+                      onClick={() => go(l.href)}
                       className={[
-                        "flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
+                        "w-full text-left flex items-center gap-2 rounded-lg px-3 py-2 text-sm",
                         active
                           ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
                           : "text-slate-700 hover:bg-slate-50",
                       ].join(" ")}
                     >
                       {l.icon} <span>{l.label}</span>
-                    </Link>
+                    </button>
                   );
                 })}
 
@@ -134,11 +163,9 @@ export default function ClientNavbar() {
                   </div>
                 ) : (
                   <div className="pt-2">
-                    <Button asChild className="w-full">
-                      <Link href="/client/post-job">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Post a job
-                      </Link>
+                    <Button className="w-full" onClick={() => go("/client/post-job")}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Post a job
                     </Button>
                   </div>
                 )}
@@ -149,18 +176,16 @@ export default function ClientNavbar() {
 
         {/* Logo */}
         <Link href="/home" className="flex items-center gap-2">
-          {/* Desktop logo (swap on scroll) */}
           <Image
-            src={scrolled ? Images.logo : Images.logo1}
+            src={solidNav ? Images.logo : Images.logo1}
             alt="Logo"
             width={140}
             height={36}
             className="hidden h-9 w-auto object-contain sm:block"
             priority
           />
-          {/* Mobile logo (swap on scroll) */}
           <Image
-            src={scrolled ? Images.logo : Images.logo1}
+            src={solidNav ? Images.logo : Images.logo1}
             alt="Logo"
             width={110}
             height={32}
@@ -169,28 +194,28 @@ export default function ClientNavbar() {
           />
         </Link>
 
-        {/* Center: NAV ONLY (search removed, items centered) */}
+        {/* Center nav */}
         <nav className="mx-auto hidden items-center gap-1 md:flex">
           {publicLinks.map((l) => {
             const active = pathname === l.href || pathname?.startsWith(l.href + "/");
             return (
-              <Link
+              <button
                 key={l.href}
-                href={l.href}
+                onClick={() => go(l.href)}
                 className={`${linkBase} ${active ? linkActive : linkIdle} flex items-center gap-2`}
               >
                 {l.icon}
                 <span>{l.label}</span>
-              </Link>
+              </button>
             );
           })}
         </nav>
 
-        {/* Right: actions */}
+        {/* Right actions */}
         <div className="ml-auto flex items-center gap-2 md:gap-3">
           {!isAuthed ? (
             <>
-              <Button asChild variant={scrolled ? "outline" : "secondary"}>
+              <Button asChild variant={solidNav ? "outline" : "secondary"}>
                 <Link href="/sign-in">Sign in</Link>
               </Button>
               <Button asChild className="bg-emerald-500 hover:bg-emerald-600">
@@ -199,11 +224,9 @@ export default function ClientNavbar() {
             </>
           ) : (
             <>
-              <Button asChild className="hidden md:inline-flex">
-                <Link href="/client/post-job">
-                  <Plus className="mr-2 h-4 w-4" />
-                  Post a job
-                </Link>
+              <Button className="hidden md:inline-flex" onClick={() => go("/client/post-job")}>
+                <Plus className="mr-2 h-4 w-4" />
+                Post a job
               </Button>
 
               <Button
@@ -211,7 +234,7 @@ export default function ClientNavbar() {
                 size="icon"
                 asChild
                 aria-label="Notifications"
-                className={scrolled ? "" : "text-white hover:bg-white/10"}
+                className={solidNav ? "" : "text-white hover:bg-white/10"}
               >
                 <Link href="/client/notifications">
                   <Bell className="h-5 w-5" />
@@ -221,11 +244,13 @@ export default function ClientNavbar() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className={`inline-flex items-center gap-2 rounded-full p-1 outline-none ring-offset-2 focus:ring-2 focus:ring-emerald-500 ${scrolled ? "" : "text-white"}`}
+                    className={`inline-flex items-center gap-2 rounded-full p-1 outline-none ring-offset-2 focus:ring-2 focus:ring-emerald-500 ${
+                      solidNav ? "" : "text-white"
+                    }`}
                     aria-label="Account menu"
                   >
                     <Avatar className="h-8 w-8 ring-1 ring-slate-200">
-                      <AvatarImage src={avatar} alt={displayName} />
+                      <AvatarImage src={avatarSrc} alt={displayName} />
                       <AvatarFallback>
                         {displayName?.slice(0, 1)?.toUpperCase() ?? "U"}
                       </AvatarFallback>
@@ -235,7 +260,9 @@ export default function ClientNavbar() {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>
                     <div className="truncate font-medium">{displayName}</div>
-                    <div className="truncate text-xs text-slate-500">{user?.email}</div>
+                    <div className="truncate text-xs text-slate-500">
+                      {clientProfile?.email || sessionUser?.email}
+                    </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem asChild>
@@ -264,7 +291,6 @@ export default function ClientNavbar() {
           )}
         </div>
       </div>
-      {/* Mobile search block removed since banner now owns search */}
     </header>
   );
 }

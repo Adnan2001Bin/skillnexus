@@ -46,7 +46,7 @@ export default function Banner() {
 
   const handleServiceClick = (service: { value: string; title: string }) => {
     router.push(
-      `/talentList?category=${encodeURIComponent(
+      `/find-freelancers?category=${encodeURIComponent(
         service.value
       )}&services=${encodeURIComponent(service.title)}`
     );
@@ -57,7 +57,7 @@ export default function Banner() {
     const formData = new FormData(event.currentTarget);
     const searchQuery = formData.get("search") as string;
     if (searchQuery.trim()) {
-      router.push(`/talentList?search=${encodeURIComponent(searchQuery.trim())}`);
+      router.push(`/find-freelancers?search=${encodeURIComponent(searchQuery.trim())}`);
     }
   };
 
