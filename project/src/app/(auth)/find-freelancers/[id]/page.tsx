@@ -12,8 +12,8 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge"; // optional; remove if you don't have it
-import { MessageSquare, ShieldCheck, MapPin, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { MessageSquare, ShieldCheck, MapPin, Sparkles, X } from "lucide-react";
 
 type RatePlan = {
   type: "Basic" | "Standard" | "Premium";
@@ -26,6 +26,38 @@ type PortfolioItem = {
   imageUrl?: string | null;
   projectUrl?: string | null;
 };
+
+type Requirement =
+  | {
+      id: string;
+      type: "text" | "textarea";
+      question: string;
+      helperText?: string;
+      required?: boolean;
+    }
+  | {
+      id: string;
+      type: "multiple_choice";
+      question: string;
+      helperText?: string;
+      required?: boolean;
+      options: string[];
+      allowMultiple?: boolean;
+    }
+  | {
+      id: string;
+      type: "file";
+      question: string;
+      helperText?: string;
+      required?: boolean;
+      accepts?: string[];
+      maxFiles?: number | null;
+    }
+  | {
+      id: string;
+      type: "instructions";
+      content: string;
+    };
 
 type Profile = {
   _id: string;
@@ -52,6 +84,9 @@ export default function PublicFreelancerDetailPage() {
   const [loading, setLoading] = useState(true);
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // NEW: purchase state
+  const [purchasePlan, setPurchasePlan] = useState<RatePlan | null>(null);
 
   const minPrice = useMemo(() => {
     if (!p?.ratePlans?.length) return null;
@@ -113,7 +148,7 @@ export default function PublicFreelancerDetailPage() {
 
       {!loading && p && (
         <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
-          {/* ===== LEFT COLUMN ===== */}
+          {/* LEFT */}
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {/* Header */}
             <div className="border-b border-slate-200 p-6">
@@ -161,7 +196,6 @@ export default function PublicFreelancerDetailPage() {
                 </div>
               </div>
 
-              {/* Fiverr-like CTA Row */}
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Badge className="bg-emerald-600 hover:bg-emerald-600">
                   <Sparkles className="mr-1 h-3.5 w-3.5" />
@@ -258,7 +292,7 @@ export default function PublicFreelancerDetailPage() {
                 </section>
               )}
 
-              {/* ===== Packages (Modern cards + Purchase) ===== */}
+              {/* ===== Packages (updated buttons) ===== */}
               {Array.isArray(p.ratePlans) && p.ratePlans.length > 0 && (
                 <section>
                   <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">
@@ -297,16 +331,11 @@ export default function PublicFreelancerDetailPage() {
 
                         <div className="mt-4 flex items-center gap-2">
                           <Button
-                            asChild
                             className="w-full bg-emerald-600 hover:bg-emerald-700"
+                            onClick={() => setPurchasePlan(rp)}
+                            disabled={rp.price <= 0}
                           >
-                            <Link
-                              href={`/client/messages?to=${encodeURIComponent(
-                                p.userName
-                              )}&plan=${encodeURIComponent(rp.type)}`}
-                            >
-                              Purchase
-                            </Link>
+                            Purchase
                           </Button>
                           <Button
                             asChild
@@ -330,7 +359,7 @@ export default function PublicFreelancerDetailPage() {
                 </section>
               )}
 
-              {/* ===== Portfolio (shadcn Carousel) ===== */}
+              {/* ===== Portfolio ===== */}
               <section>
                 <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">
                   Portfolio
@@ -394,7 +423,7 @@ export default function PublicFreelancerDetailPage() {
             </div>
           </div>
 
-          {/* ===== RIGHT COLUMN (sticky) ===== */}
+          {/* RIGHT column unchanged */}
           <aside className="space-y-4 md:sticky md:top-4">
             <div className="rounded-2xl border border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 p-5 shadow-sm">
               {minPrice !== null && (
@@ -441,11 +470,403 @@ export default function PublicFreelancerDetailPage() {
                 )}
               </div>
             </div>
-
-            {/* (Removed Social section per your request) */}
           </aside>
         </div>
       )}
+
+      {/* NEW: Purchase Drawer */}
+      {p && purchasePlan && (
+        <PurchaseFlow
+          freelancerId={p._id}
+          freelancerName={p.userName}
+          plan={purchasePlan}
+          onClose={() => setPurchasePlan(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ================= Purchase Flow Drawer ================= */
+
+function PurchaseFlow({
+  freelancerId,
+  freelancerName,
+  plan,
+  onClose,
+}: {
+  freelancerId: string;
+  freelancerName: string;
+  plan: { type: "Basic" | "Standard" | "Premium"; price: number };
+  onClose: () => void;
+}) {
+  const [step, setStep] = useState<"checkout" | "payment" | "requirements" | "done">("checkout");
+  const [busy, setBusy] = useState(false);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [status, setStatus] = useState<{ payment: "unpaid" | "paid"; project: "pending" | "approved" | "cancelled" }>({
+    payment: "unpaid",
+    project: "pending",
+  });
+
+  // local answers state
+  const [answers, setAnswers] = useState<Record<string, any>>({});
+
+  const createOrder = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/client/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          freelancerId,
+          planType: plan.type,
+          // clientEmail: "demo@example.com", // optional
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || "Failed to create order");
+      setOrderId(json.order.id);
+      setStatus((s) => ({ ...s, payment: json.order.paymentStatus, project: json.order.projectStatus }));
+      setStep("payment");
+    } catch (e: any) {
+      alert(e.message || "Could not create order");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const pay = async () => {
+    if (!orderId) return;
+    setBusy(true);
+    try {
+      // demo card form could be validated here; we skip that
+      const res = await fetch(`/api/client/orders/${orderId}/pay`, { method: "POST" });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || "Payment failed");
+
+      // fetch order to get requirements snapshot
+      const getRes = await fetch(`/api/client/orders/${orderId}`);
+      const getJson = await getRes.json();
+      if (!getRes.ok) throw new Error(getJson?.message || "Failed to load order");
+      setRequirements(getJson.order.requirementsSnapshot || []);
+      setStatus((s) => ({ ...s, payment: "paid" }));
+      setStep("requirements");
+    } catch (e: any) {
+      alert(e.message || "Payment error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitRequirements = async () => {
+    if (!orderId) return;
+    setBusy(true);
+    try {
+      // transform local `answers` into API shape
+      const payload = {
+        answers: Object.entries(answers).map(([id, v]) => {
+          const a: any = { id };
+          if (typeof v === "string") a.text = v;
+          else if (Array.isArray(v) && v.every((x) => typeof x === "string")) a.options = v;
+          else if (Array.isArray(v) && v.every((x) => x && typeof x.name === "string")) a.files = v;
+          return a;
+        }),
+      };
+
+      const res = await fetch(`/api/client/orders/${orderId}/requirements`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || "Submit failed");
+      setStatus({ payment: "paid", project: "pending" });
+      setStep("done");
+    } catch (e: any) {
+      alert(e.message || "Could not submit requirements");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  /** Render fields according to requirement type (demo uploader keeps only name/size) */
+  const renderRequirement = (r: Requirement) => {
+    if (r.type === "instructions") {
+      return (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700 whitespace-pre-wrap">
+          {r.content}
+        </div>
+      );
+    }
+    if (r.type === "text" || r.type === "textarea") {
+      return (
+        <div>
+          <label className="text-sm font-medium text-slate-800">
+            {r.question} {r.required && <span className="text-red-600">*</span>}
+          </label>
+          {r.helperText && <div className="text-xs text-slate-500">{r.helperText}</div>}
+          {r.type === "text" ? (
+            <input
+              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 outline-none ring-emerald-500 focus:ring-2"
+              value={answers[r.id] || ""}
+              onChange={(e) => setAnswers((s) => ({ ...s, [r.id]: e.target.value }))}
+            />
+          ) : (
+            <textarea
+              className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 outline-none ring-emerald-500 focus:ring-2"
+              rows={4}
+              value={answers[r.id] || ""}
+              onChange={(e) => setAnswers((s) => ({ ...s, [r.id]: e.target.value }))}
+            />
+          )}
+        </div>
+      );
+    }
+    if (r.type === "multiple_choice") {
+      const selected: string[] = answers[r.id] || [];
+      const toggle = (opt: string) => {
+        setAnswers((s) => {
+          const curr: string[] = s[r.id] || [];
+          if (r.allowMultiple) {
+            return curr.includes(opt)
+              ? { ...s, [r.id]: curr.filter((x) => x !== opt) }
+              : { ...s, [r.id]: [...curr, opt] };
+          }
+          return { ...s, [r.id]: curr.includes(opt) ? [] : [opt] };
+        });
+      };
+      return (
+        <div>
+          <label className="text-sm font-medium text-slate-800">
+            {r.question} {r.required && <span className="text-red-600">*</span>}
+          </label>
+          {r.helperText && <div className="text-xs text-slate-500">{r.helperText}</div>}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {r.options.map((opt) => {
+              const active = selected.includes(opt);
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => toggle(opt)}
+                  className={`rounded-full px-3 py-1 text-sm ring-1 transition ${
+                    active
+                      ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                      : "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {opt}
+                </button>
+              );
+            })}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {r.allowMultiple ? "Multiple selections allowed" : "Single selection"}
+          </div>
+        </div>
+      );
+    }
+    if (r.type === "file") {
+      const files: { name: string; size?: number }[] = answers[r.id] || [];
+      const onFiles = (list: FileList | null) => {
+        if (!list) return;
+        const arr = Array.from(list).map((f) => ({ name: f.name, size: f.size }));
+        setAnswers((s) => ({ ...s, [r.id]: arr }));
+      };
+      return (
+        <div>
+          <label className="text-sm font-medium text-slate-800">
+            {r.question} {r.required && <span className="text-red-600">*</span>}
+          </label>
+          {r.helperText && <div className="text-xs text-slate-500">{r.helperText}</div>}
+          <input
+            type="file"
+            multiple={!!(r.maxFiles && r.maxFiles > 1)}
+            accept={r.accepts?.join(",") || undefined}
+            onChange={(e) => onFiles(e.target.files)}
+            className="mt-1 block w-full text-sm"
+          />
+          {files.length > 0 && (
+            <ul className="mt-2 space-y-1 text-sm text-slate-700">
+              {files.map((f, i) => (
+                <li key={`${f.name}-${i}`}>• {f.name}{typeof f.size === "number" ? ` (${Math.round(f.size/1024)}KB)` : ""}</li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-1 text-xs text-slate-500">
+            Accepts: {(r.accepts || []).length ? r.accepts!.join(", ") : "any"} • Max files:{" "}
+            {r.maxFiles || 1}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/40 p-0 md:p-6">
+      <div className="relative w-full max-w-2xl rounded-t-2xl md:rounded-2xl border border-slate-200 bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 p-4">
+          <div className="font-semibold text-slate-900">
+            {step === "checkout" && "Checkout"}
+            {step === "payment" && "Payment (Demo)"}
+            {step === "requirements" && "Requirements"}
+            {step === "done" && "Order submitted"}
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="p-4">
+          {/* Stepper */}
+          <div className="mb-4 flex items-center gap-2 text-xs">
+            <StepBubble active={step === "checkout"} done={["payment","requirements","done"].includes(step)}>
+              1
+            </StepBubble>
+            <div className="h-px flex-1 bg-slate-200" />
+            <StepBubble active={step === "payment"} done={["requirements","done"].includes(step)}>
+              2
+            </StepBubble>
+            <div className="h-px flex-1 bg-slate-200" />
+            <StepBubble active={step === "requirements"} done={step === "done"}>
+              3
+            </StepBubble>
+            <div className="h-px flex-1 bg-slate-200" />
+            <StepBubble active={step === "done"} done={false}>
+              4
+            </StepBubble>
+          </div>
+
+          {/* Content */}
+          {step === "checkout" && (
+            <div className="space-y-3">
+              <div className="text-sm text-slate-700">
+                You’re buying <span className="font-semibold">{plan.type}</span> from{" "}
+                <span className="font-semibold">{freelancerName}</span>.
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <div>Subtotal</div>
+                  <div className="font-semibold">${plan.price}</div>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <div>Fees</div>
+                  <div>$0.00</div>
+                </div>
+                <div className="mt-2 border-t border-emerald-200 pt-2 flex items-center justify-between">
+                  <div className="font-semibold">Total</div>
+                  <div className="font-bold">${plan.price}</div>
+                </div>
+              </div>
+
+              <div className="text-xs text-slate-500">
+                After payment you’ll fill the freelancer’s requirements form so they can start.
+              </div>
+
+              <div className="mt-3 flex justify-end gap-2">
+                <Button variant="outline" onClick={onClose}>
+                  Cancel
+                </Button>
+                <Button onClick={createOrder} disabled={busy}>
+                  {busy ? "Processing..." : "Proceed to payment"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === "payment" && (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-slate-200 p-3">
+                <div className="text-sm font-medium text-slate-800">Demo card</div>
+                <div className="mt-2 grid gap-2 md:grid-cols-2">
+                  <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Card number" defaultValue="4242 4242 4242 4242" />
+                  <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="MM/YY" defaultValue="12/34" />
+                  <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="CVC" defaultValue="123" />
+                  <input className="rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Name on card" defaultValue="JOHN DEMO" />
+                </div>
+                <div className="mt-3 flex items-center justify-between text-sm">
+                  <div>Amount</div>
+                  <div className="font-semibold">${plan.price}</div>
+                </div>
+              </div>
+
+              <div className="mt-3 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setStep("checkout")} disabled={busy}>
+                  Back
+                </Button>
+                <Button onClick={pay} disabled={busy || !orderId}>
+                  {busy ? "Paying..." : "Pay now"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === "requirements" && (
+            <div className="space-y-4">
+              {requirements.length === 0 ? (
+                <div className="text-sm text-slate-600">
+                  No requirements were provided by the freelancer. You can continue.
+                </div>
+              ) : (
+                requirements.map((r) => (
+                  <div key={r.id} className="rounded-xl border border-slate-200 p-3">
+                    {renderRequirement(r)}
+                  </div>
+                ))
+              )}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setStep("payment")} disabled={busy}>
+                  Back
+                </Button>
+                <Button onClick={submitRequirements} disabled={busy}>
+                  {busy ? "Submitting..." : "Submit & finish"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {step === "done" && (
+            <div className="space-y-3">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <div className="text-slate-700">Payment</div>
+                  <div className="font-semibold text-emerald-700">Paid</div>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <div className="text-slate-700">Project status</div>
+                  <div className="font-semibold text-amber-700">Pending approval</div>
+                </div>
+              </div>
+              <div className="text-sm text-slate-700">
+                Thanks! The freelancer will review your requirements and proceed. You’ll be notified once the project is approved or if more info is needed.
+              </div>
+              <div className="flex justify-end">
+                <Button onClick={onClose}>Close</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StepBubble({ active, done, children }: { active: boolean; done: boolean; children: React.ReactNode }) {
+  return (
+    <div
+      className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
+        active ? "bg-emerald-600 text-white"
+        : done ? "bg-emerald-100 text-emerald-700"
+        : "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {children}
     </div>
   );
 }
