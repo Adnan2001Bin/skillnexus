@@ -12,28 +12,31 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   await connectDB();
   try {
     const p = await UserModel.findById(params.id)
-      .select([
-        "userName",
-        "email",
-        "role",
-        "location",
-        "profilePicture",
-        "bio",
-        "category",
-        "services",
-        "skills",
-        "ratePlans",
-        "portfolio",
-        "aboutThisGig",
-        "whatIOffer",
-        "socialLinks",
-        "languageProficiency",
-        "approvalStatus",
-        "rejectionReason",
-        "reviewedAt",
-        "createdAt",
-        "updatedAt",
-      ].join(" "))
+      .select(
+        [
+          "userName",
+          "email",
+          "role",
+          "location",
+          "profilePicture",
+          "bio",
+          "category",
+          "services",
+          "skills",
+          "ratePlans",
+          "portfolio",
+          "aboutThisGig",
+          "whatIOffer",
+          "socialLinks",
+          "languageProficiency",
+          "requirements", // ⬅️ NEW: include requirements in admin view
+          "approvalStatus",
+          "rejectionReason",
+          "reviewedAt",
+          "createdAt",
+          "updatedAt",
+        ].join(" ")
+      )
       .lean();
 
     if (!p || p.role !== "freelancer") {
@@ -103,8 +106,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 // --- DELETE (remove profile / account) ---
-// Currently deletes the whole User document (your Option B behavior for that user id).
-// If you want "Delete profile only" semantics, you'd instead clear freelancer fields.
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   await connectDB();
   try {

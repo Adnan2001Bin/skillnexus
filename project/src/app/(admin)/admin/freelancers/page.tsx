@@ -328,7 +328,7 @@ export default function AdminFreelancersPage() {
       {/* View Drawer */}
       <ProfileDrawer id={viewId} onClose={() => setViewId(null)} />
 
-      {/* Reject Dialog (kept custom, but you can swap to shadcn Dialog if you prefer) */}
+      {/* Reject Dialog */}
       <RejectDialog
         open={!!rejectId}
         reason={rejectReason}
@@ -374,7 +374,6 @@ function StatusBadge({
 }
 
 /* keep your existing RejectDialog/ProfileDrawer/computeProgress below */
-
 
 function ProfileDrawer({
   id,
@@ -498,65 +497,136 @@ function ProfileDrawer({
               </div>
             )}
 
-            <div>
-  <div className="text-xs uppercase tracking-wide text-slate-500">
-    Portfolio
-  </div>
-
-  {p.portfolio?.length ? (
-    <Carousel className="mt-2 w-full" opts={{ align: "start", loop: true }}>
-      <CarouselContent>
-        {p.portfolio.map((it: any, idx: number) => (
-          <CarouselItem key={`${it?.title ?? "item"}-${idx}`} className="md:basis-1/2">
-            <div className="h-full rounded-xl border border-slate-200 p-3">
-              {it?.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={it.imageUrl}
-                  alt={it?.title || `Portfolio item ${idx + 1}`}
-                  className="mb-2 h-44 w-full rounded-lg object-cover"
-                />
-              ) : (
-                <div className="mb-2 flex h-44 w-full items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-                  No image
+            {/* NEW: Requirements block */}
+            {(p.requirements?.length || 0) > 0 && (
+              <div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">
+                  Requirements (client questionnaire)
                 </div>
-              )}
+                <ul className="mt-2 space-y-3">
+                  {p.requirements.map((r: any) => (
+                    <li
+                      key={r.id}
+                      className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">
+                          {prettyReqType(r.type)}
+                        </div>
+                        {r.required ? (
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 ring-1 ring-emerald-200">
+                            Required
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">
+                            Optional
+                          </span>
+                        )}
+                      </div>
 
-              <div className="font-medium text-slate-900 line-clamp-1">
-                {it?.title || "Untitled project"}
+                      {r.type === "instructions" ? (
+                        <div className="mt-2 text-sm text-slate-700 whitespace-pre-wrap">
+                          {r.content}
+                        </div>
+                      ) : (
+                        <>
+                          <div className="mt-1 font-medium text-slate-900">
+                            {r.question}
+                          </div>
+                          {r.helperText && (
+                            <div className="mt-1 text-xs text-slate-600">
+                              {r.helperText}
+                            </div>
+                          )}
+
+                          {r.type === "multiple_choice" && r.options?.length ? (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {r.options.map((opt: string) => (
+                                <span
+                                  key={opt}
+                                  className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-700 ring-1 ring-slate-200"
+                                >
+                                  {opt}
+                                </span>
+                              ))}
+                              <span className="text-[11px] text-slate-500">
+                                {r.allowMultiple ? "Multiple selections allowed" : "Single selection"}
+                              </span>
+                            </div>
+                          ) : null}
+
+                          {r.type === "file" && (
+                            <div className="mt-2 text-xs text-slate-600">
+                              Accepts: {(r.accepts || []).length ? r.accepts.join(", ") : "any"} • Max files:{" "}
+                              {r.maxFiles || 1}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               </div>
-              {it?.description && (
-                <div className="text-sm text-slate-600 line-clamp-3">
-                  {it.description}
-                </div>
-              )}
+            )}
 
-              {it?.projectUrl && (
-                <a
-                  className="mt-2 inline-block text-xs text-emerald-700 underline"
-                  href={it.projectUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  View project
-                </a>
+            <div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">
+                Portfolio
+              </div>
+
+              {p.portfolio?.length ? (
+                <Carousel className="mt-2 w-full" opts={{ align: "start", loop: true }}>
+                  <CarouselContent>
+                    {p.portfolio.map((it: any, idx: number) => (
+                      <CarouselItem key={`${it?.title ?? "item"}-${idx}`} className="md:basis-1/2">
+                        <div className="h-full rounded-xl border border-slate-200 p-3">
+                          {it?.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={it.imageUrl}
+                              alt={it?.title || `Portfolio item ${idx + 1}`}
+                              className="mb-2 h-44 w-full rounded-lg object-cover"
+                            />
+                          ) : (
+                            <div className="mb-2 flex h-44 w-full items-center justify-center rounded-lg bg-slate-100 text-slate-400">
+                              No image
+                            </div>
+                          )}
+
+                          <div className="font-medium text-slate-900 line-clamp-1">
+                            {it?.title || "Untitled project"}
+                          </div>
+                          {it?.description && (
+                            <div className="text-sm text-slate-600 line-clamp-3">
+                              {it.description}
+                            </div>
+                          )}
+
+                          {it?.projectUrl && (
+                            <a
+                              className="mt-2 inline-block text-xs text-emerald-700 underline"
+                              href={it.projectUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              View project
+                            </a>
+                          )}
+                        </div>
+                      </CarouselItem>
+                    ))}
+                  </CarouselContent>
+
+                  {/* Controls pinned below so they don't overlap content */}
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <CarouselPrevious className="static translate-x-0 translate-y-0" />
+                    <CarouselNext className="static translate-x-0 translate-y-0" />
+                  </div>
+                </Carousel>
+              ) : (
+                <div className="mt-1 text-sm text-slate-500">No portfolio items.</div>
               )}
             </div>
-          </CarouselItem>
-        ))}
-      </CarouselContent>
-
-      {/* Controls pinned below so they don't overlap content */}
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <CarouselPrevious className="static translate-x-0 translate-y-0" />
-        <CarouselNext className="static translate-x-0 translate-y-0" />
-      </div>
-    </Carousel>
-  ) : (
-    <div className="mt-1 text-sm text-slate-500">No portfolio items.</div>
-  )}
-</div>
-
           </div>
         )}
       </div>
@@ -605,6 +675,8 @@ function computeProgress(p: any): number {
     Array.isArray(p.ratePlans) && p.ratePlans.some((r: any) => r.price > 0),
     Array.isArray(p.portfolio) && p.portfolio.length >= 1,
     !!p.aboutThisGig && p.aboutThisGig.length > 50,
+    // Optionally count requirements too:
+    // Array.isArray(p.requirements) && p.requirements.length > 0,
   ];
   const score = checks.filter(Boolean).length;
   return Math.round((score / checks.length) * 100);
@@ -655,4 +727,22 @@ function RejectDialog({
       </div>
     </div>
   );
+}
+
+// Helper for requirement type label (admin drawer)
+function prettyReqType(t: string) {
+  switch (t) {
+    case "text":
+      return "Text question";
+    case "textarea":
+      return "Long answer";
+    case "multiple_choice":
+      return "Multiple choice";
+    case "file":
+      return "File upload";
+    case "instructions":
+      return "Instructions";
+    default:
+      return "Requirement";
+  }
 }

@@ -25,3 +25,21 @@ declare module "next-auth" {
     accessToken?: string;
   }
 }
+
+export type RequirementType = "instructions" | "text" | "textarea" | "multiple" | "file";
+
+export type RequirementQuestion = {
+  id: string;                 // stable client id
+  type: RequirementType;
+  label: string;              // e.g. "What’s your website URL?"
+  helpText?: string;          // hint/helper copy
+  required?: boolean;
+
+  // multiple choice
+  options?: string[];         // only for type === "multiple"
+  multiSelect?: boolean;      // only for type === "multiple"
+
+  // file upload
+  maxFiles?: number;          // only for type === "file"
+  acceptTypes?: string[];     // e.g. ["image/png","image/jpeg","application/pdf"]
+};

@@ -86,7 +86,7 @@ export default function PublicFreelancerDetailPage() {
   const firstName = (p?.userName || "Freelancer").split(" ")[0];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 md:px-6">
+    <div className="mx-auto max-w-6xl px-4 py-8 md:px-6 font-sans">
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Freelancer</h1>
         <Link

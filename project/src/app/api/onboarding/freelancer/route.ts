@@ -15,7 +15,6 @@ const CATEGORY_VALUES = [
   "consulting",
 ] as const;
 
-// Option A: strict to match typical Mongoose "required" intent
 const RatePlan = z.object({
   type: z.enum(["Basic", "Standard", "Premium"]),
   price: z.number().min(0),
@@ -31,6 +30,52 @@ const PortfolioItem = z.object({
   imageUrl: z.string().url().optional(),
   projectUrl: z.string().url().optional(),
 });
+
+/* ---------- NEW: Requirements schema ---------- */
+const RequirementBase = z.object({
+  id: z.string().min(1),
+  required: z.boolean().optional().default(true),
+  helperText: z.string().trim().optional().default(""),
+});
+
+const RequirementText = RequirementBase.extend({
+  type: z.literal("text"),
+  question: z.string().trim().min(1),
+  placeholder: z.string().trim().optional().default(""),
+});
+
+const RequirementTextarea = RequirementBase.extend({
+  type: z.literal("textarea"),
+  question: z.string().trim().min(1),
+  placeholder: z.string().trim().optional().default(""),
+});
+
+const RequirementMC = RequirementBase.extend({
+  type: z.literal("multiple_choice"),
+  question: z.string().trim().min(1),
+  options: z.array(z.string().trim().min(1)).min(1),
+  allowMultiple: z.boolean().optional().default(false),
+});
+
+const RequirementFile = RequirementBase.extend({
+  type: z.literal("file"),
+  question: z.string().trim().min(1),
+  accepts: z.array(z.string().trim()).optional().default([]),
+  maxFiles: z.number().int().min(1).optional().default(1),
+});
+
+const RequirementInstructions = RequirementBase.extend({
+  type: z.literal("instructions"),
+  content: z.string().trim().min(1),
+});
+
+const RequirementItem = z.discriminatedUnion("type", [
+  RequirementText,
+  RequirementTextarea,
+  RequirementMC,
+  RequirementFile,
+  RequirementInstructions,
+]);
 
 const FreelancerSchema = z.object({
   email: z.string().email(),
@@ -51,6 +96,9 @@ const FreelancerSchema = z.object({
   portfolio: z.array(PortfolioItem).optional().default([]),
   ratePlans: z.array(RatePlan).optional().default([]),
   aboutThisGig: z.string().trim().max(1500).optional().default(""),
+
+  // NEW: requirements form
+  requirements: z.array(RequirementItem).optional().default([]),
 });
 
 function distinctStrings(arr: string[] | undefined) {
@@ -103,7 +151,7 @@ export async function POST(req: Request) {
     const whatIOffer = distinctStrings(data.whatIOffer);
 
     await UserModel.findOneAndUpdate(
-      { _id: user._id }, // <-- FIXED: update this user doc
+      { _id: user._id },
       {
         location: data.location || null,
         profilePicture: data.profilePicture || null,
@@ -117,8 +165,10 @@ export async function POST(req: Request) {
         whatIOffer,
         socialLinks: data.socialLinks || [],
         languageProficiency,
+        // NEW: requirements
+        requirements: data.requirements || [],
       },
-      { new: true } // upsert not needed for existing user
+      { new: true }
     );
 
     return NextResponse.json(

@@ -19,11 +19,31 @@ type RatePlan = {
   deliveryDays: number;
   revisions: number;
 };
+
 type PortfolioItem = {
   title: string;
   description: string;
   imageUrl?: string;
   projectUrl?: string;
+};
+
+type RequirementType = "text" | "textarea" | "multiple_choice" | "file" | "instructions";
+
+type RequirementItem = {
+  id: string;
+  type: RequirementType;
+  question?: string;          // for text / textarea / multiple_choice / file
+  required?: boolean;
+  placeholder?: string;       // text / textarea
+  helperText?: string;        // any
+  // multiple choice
+  options?: string[];
+  allowMultiple?: boolean;
+  // file
+  accepts?: string[];         // e.g., ['.png', '.jpg', '.pdf']
+  maxFiles?: number;          // e.g., 3
+  // instructions
+  content?: string;           // body text for "instructions" box
 };
 
 /* ---------------- Steps ---------------- */
@@ -32,6 +52,7 @@ const steps = [
   { key: "skills", label: "Skills", icon: StarIcon },
   { key: "portfolio", label: "Portfolio", icon: GalleryIcon },
   { key: "packages", label: "Packages", icon: PackageIcon },
+  { key: "requirements", label: "Requirements", icon: ClipboardIcon },
   { key: "preview", label: "Preview", icon: EyeIcon },
 ];
 
@@ -49,6 +70,11 @@ function normalizeRatePlans(existing?: RatePlan[]): RatePlan[] {
     };
   return [base("Basic"), base("Standard"), base("Premium")];
 }
+
+const rid = () =>
+  (typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2));
 
 /* ---------------- Page ---------------- */
 export default function FreelancerOnboardingPage() {
@@ -84,6 +110,8 @@ export default function FreelancerOnboardingPage() {
     whatIOffer: [] as string[],
     socialLinks: [] as { platform: string; url: string }[],
     languageProficiency: [] as string[],
+    // NEW: Requirements
+    requirements: [] as RequirementItem[],
   });
 
   const inputClass =
@@ -137,6 +165,70 @@ export default function FreelancerOnboardingPage() {
       ),
     }));
 
+  /* ---------- Requirements helpers ---------- */
+  const addRequirement = (type: RequirementType) => {
+    const base: RequirementItem = {
+      id: rid(),
+      type,
+      required: true,
+    };
+    if (type === "instructions") {
+      base.content =
+        "Describe your project in detail, including goals, target audience, scope, references, and deadlines.";
+    } else if (type === "text") {
+      base.question = "What’s your website URL?";
+      base.placeholder = "https://example.com";
+    } else if (type === "textarea") {
+      base.question = "What kind of vibe do you want for the video?";
+      base.placeholder = "e.g., friendly, cinematic, minimal";
+    } else if (type === "multiple_choice") {
+      base.question = "Choose your video style:";
+      base.options = ["Cinematic", "Vlog", "Corporate"];
+      base.allowMultiple = false;
+    } else if (type === "file") {
+      base.question = "Upload your logo, script, or reference images";
+      base.accepts = [".png", ".jpg", ".jpeg", ".pdf"];
+      base.maxFiles = 3;
+    }
+    setForm((f) => ({ ...f, requirements: [...(f.requirements || []), base] }));
+  };
+
+  const updateRequirement = (id: string, patch: Partial<RequirementItem>) =>
+    setForm((f) => ({
+      ...f,
+      requirements: f.requirements.map((r) =>
+        r.id === id ? { ...r, ...patch } : r
+      ),
+    }));
+
+  const removeRequirement = (id: string) =>
+    setForm((f) => ({
+      ...f,
+      requirements: f.requirements.filter((r) => r.id !== id),
+    }));
+
+  const addMCOption = (id: string, value: string) => {
+    if (!value.trim()) return;
+    setForm((f) => ({
+      ...f,
+      requirements: f.requirements.map((r) =>
+        r.id === id
+          ? { ...r, options: Array.from(new Set([...(r.options || []), value.trim()])) }
+          : r
+      ),
+    }));
+  };
+
+  const removeMCOption = (id: string, value: string) =>
+    setForm((f) => ({
+      ...f,
+      requirements: f.requirements.map((r) =>
+        r.id === id
+          ? { ...r, options: (r.options || []).filter((o) => o !== value) }
+          : r
+      ),
+    }));
+
   const next = () => setStep((s) => Math.min(s + 1, steps.length - 1));
   const prev = () => setStep((s) => Math.max(s - 1, 0));
 
@@ -173,7 +265,6 @@ export default function FreelancerOnboardingPage() {
           cache: "no-store",
         });
         const json = await res.json();
-        
 
         const p = json.profile || {};
 
@@ -204,6 +295,21 @@ export default function FreelancerOnboardingPage() {
             : [],
           languageProficiency: Array.isArray(p.languageProficiency)
             ? p.languageProficiency
+            : [],
+          requirements: Array.isArray(p.requirements)
+            ? p.requirements.map((r: any) => ({
+                id: r.id || rid(),
+                type: r.type,
+                question: r.question || "",
+                required: !!r.required,
+                placeholder: r.placeholder || "",
+                helperText: r.helperText || "",
+                options: Array.isArray(r.options) ? r.options : [],
+                allowMultiple: !!r.allowMultiple,
+                accepts: Array.isArray(r.accepts) ? r.accepts : [],
+                maxFiles: typeof r.maxFiles === "number" ? r.maxFiles : undefined,
+                content: r.content || "",
+              }))
             : [],
         }));
 
@@ -570,171 +676,195 @@ export default function FreelancerOnboardingPage() {
                 </motion.div>
               )}
 
-             {step === 3 && (
-  <motion.div
-    key="packages"
-    initial={{ opacity: 0, y: 8 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, y: -8 }}
-  >
-    {/* Section heading */}
-    <div className="mb-4">
-      <h2 className="text-lg font-semibold text-slate-900">Packages</h2>
-      <p className="mt-1 text-sm text-slate-600">
-        Set up your Basic, Standard, and Premium offerings. Be specific so clients know exactly what they’ll get.
-      </p>
-    </div>
+              {step === 3 && (
+                <motion.div
+                  key="packages"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                >
+                  {/* Section heading */}
+                  <div className="mb-4">
+                    <h2 className="text-lg font-semibold text-slate-900">Packages</h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Set up your Basic, Standard, and Premium offerings. Be specific so clients know exactly what they’ll get.
+                    </p>
+                  </div>
 
-    <div className="grid gap-4 md:grid-cols-3">
-      {form.ratePlans.map((plan, i) => {
-        const idBase = `plan-${plan.type.toLowerCase()}`;
-        return (
-          <div
-            key={plan.type}
-            className="rounded-xl border border-slate-200 bg-white p-4"
-          >
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-base font-semibold text-slate-900">
-                {plan.type} Package
-              </h3>
-              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 ring-1 ring-emerald-200">
-                {plan.deliveryDays}d • {plan.revisions} rev
-              </span>
-            </div>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    {form.ratePlans.map((plan, i) => {
+                      const idBase = `plan-${plan.type.toLowerCase()}`;
+                      return (
+                        <div
+                          key={plan.type}
+                          className="rounded-xl border border-slate-200 bg-white p-4"
+                        >
+                          <div className="mb-3 flex items-center justify-between">
+                            <h3 className="text-base font-semibold text-slate-900">
+                              {plan.type} Package
+                            </h3>
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 ring-1 ring-emerald-200">
+                              {plan.deliveryDays}d • {plan.revisions} rev
+                            </span>
+                          </div>
 
-            {/* Price */}
-            <label
-              htmlFor={`${idBase}-price`}
-              className="text-xs font-medium text-slate-700"
-            >
-              Price (USD)
-            </label>
-            <input
-              id={`${idBase}-price`}
-              className={`${inputClass} mt-1`}
-              type="number"
-              min={0}
-              value={plan.price}
-              onChange={(e) => updatePlan(i, { price: +e.target.value })}
-              placeholder="e.g., 99"
-            />
+                          {/* Price */}
+                          <label
+                            htmlFor={`${idBase}-price`}
+                            className="text-xs font-medium text-slate-700"
+                          >
+                            Price (USD)
+                          </label>
+                          <input
+                            id={`${idBase}-price`}
+                            className={`${inputClass} mt-1`}
+                            type="number"
+                            min={0}
+                            value={plan.price}
+                            onChange={(e) => updatePlan(i, { price: +e.target.value })}
+                            placeholder="e.g., 99"
+                          />
 
-            {/* Delivery days */}
-            <label
-              htmlFor={`${idBase}-delivery`}
-              className="mt-3 block text-xs font-medium text-slate-700"
-            >
-              Delivery time (days)
-            </label>
-            <input
-              id={`${idBase}-delivery`}
-              className={`${inputClass} mt-1`}
-              type="number"
-              min={1}
-              value={plan.deliveryDays}
-              onChange={(e) =>
-                updatePlan(i, { deliveryDays: +e.target.value })
-              }
-              placeholder="e.g., 5"
-            />
+                          {/* Delivery days */}
+                          <label
+                            htmlFor={`${idBase}-delivery`}
+                            className="mt-3 block text-xs font-medium text-slate-700"
+                          >
+                            Delivery time (days)
+                          </label>
+                          <input
+                            id={`${idBase}-delivery`}
+                            className={`${inputClass} mt-1`}
+                            type="number"
+                            min={1}
+                            value={plan.deliveryDays}
+                            onChange={(e) =>
+                              updatePlan(i, { deliveryDays: +e.target.value })
+                            }
+                            placeholder="e.g., 5"
+                          />
 
-            {/* Revisions */}
-            <label
-              htmlFor={`${idBase}-revisions`}
-              className="mt-3 block text-xs font-medium text-slate-700"
-            >
-              Number of revisions
-            </label>
-            <input
-              id={`${idBase}-revisions`}
-              className={`${inputClass} mt-1`}
-              type="number"
-              min={0}
-              value={plan.revisions}
-              onChange={(e) => updatePlan(i, { revisions: +e.target.value })}
-              placeholder="e.g., 2"
-            />
+                          {/* Revisions */}
+                          <label
+                            htmlFor={`${idBase}-revisions`}
+                            className="mt-3 block text-xs font-medium text-slate-700"
+                          >
+                            Number of revisions
+                          </label>
+                          <input
+                            id={`${idBase}-revisions`}
+                            className={`${inputClass} mt-1`}
+                            type="number"
+                            min={0}
+                            value={plan.revisions}
+                            onChange={(e) => updatePlan(i, { revisions: +e.target.value })}
+                            placeholder="e.g., 2"
+                          />
 
-            {/* Description */}
-            <label
-              htmlFor={`${idBase}-desc`}
-              className="mt-3 block text-xs font-medium text-slate-700"
-            >
-              Short description
-            </label>
-            <textarea
-              id={`${idBase}-desc`}
-              className={`${inputClass} mt-1`}
-              rows={3}
-              value={plan.description}
-              onChange={(e) => updatePlan(i, { description: e.target.value })}
-              placeholder="Summarize what this package delivers."
-            />
+                          {/* Description */}
+                          <label
+                            htmlFor={`${idBase}-desc`}
+                            className="mt-3 block text-xs font-medium text-slate-700"
+                          >
+                            Short description
+                          </label>
+                          <textarea
+                            id={`${idBase}-desc`}
+                            className={`${inputClass} mt-1`}
+                            rows={3}
+                            value={plan.description}
+                            onChange={(e) => updatePlan(i, { description: e.target.value })}
+                            placeholder="Summarize what this package delivers."
+                          />
 
-            {/* What’s included */}
-            <div className="mt-3">
-              <label className="text-xs font-medium text-slate-700">
-                What’s included{" "}
-                <span className="text-slate-500">(press Enter to add)</span>
-              </label>
-              <TagInput
-                values={plan.whatsIncluded}
-                onAdd={(v) =>
-                  updatePlan(i, {
-                    whatsIncluded: Array.from(
-                      new Set([...(plan.whatsIncluded || []), v])
-                    ),
-                  })
-                }
-                onRemove={(v) =>
-                  updatePlan(i, {
-                    whatsIncluded: (plan.whatsIncluded || []).filter(
-                      (x) => x !== v
-                    ),
-                  })
-                }
-                placeholder="e.g., Landing page, API integration, Tests"
-              />
-            </div>
-          </div>
-        );
-      })}
-    </div>
+                          {/* What’s included */}
+                          <div className="mt-3">
+                            <label className="text-xs font-medium text-slate-700">
+                              What’s included{" "}
+                              <span className="text-slate-500">(press Enter to add)</span>
+                            </label>
+                            <TagInput
+                              values={plan.whatsIncluded}
+                              onAdd={(v) =>
+                                updatePlan(i, {
+                                  whatsIncluded: Array.from(
+                                    new Set([...(plan.whatsIncluded || []), v])
+                                  ),
+                                })
+                              }
+                              onRemove={(v) =>
+                                updatePlan(i, {
+                                  whatsIncluded: (plan.whatsIncluded || []).filter(
+                                    (x) => x !== v
+                                  ),
+                                })
+                              }
+                              placeholder="e.g., Landing page, API integration, Tests"
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
 
-    {/* About + Social below packages, unchanged */}
-    <div className="mt-6 grid gap-4 md:grid-cols-2">
-      <div className="md:col-span-2">
-        <label className="text-sm font-medium text-slate-700">
-          About this Gig
-        </label>
-        <textarea
-          className={`${inputClass} mt-1 w-full`}
-          rows={4}
-          value={form.aboutThisGig}
-          onChange={(e) =>
-            setForm((f) => ({
-              ...f,
-              aboutThisGig: e.target.value,
-            }))
-          }
-        />
-      </div>
+                  {/* About + Social */}
+                  <div className="mt-6 grid gap-4 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="text-sm font-medium text-slate-700">
+                        About this Gig
+                      </label>
+                      <textarea
+                        className={`${inputClass} mt-1 w-full`}
+                        rows={4}
+                        value={form.aboutThisGig}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            aboutThisGig: e.target.value,
+                          }))
+                        }
+                      />
+                    </div>
 
-      <div className="md:col-span-2">
-        <label className="text-sm font-medium text-slate-700">
-          Social Links
-        </label>
-        <SocialLinksEditor
-          values={form.socialLinks}
-          onChange={(values) => setForm((f) => ({ ...f, socialLinks: values }))}
-        />
-      </div>
-    </div>
-  </motion.div>
-)}
-
+                    <div className="md:col-span-2">
+                      <label className="text-sm font-medium text-slate-700">
+                        Social Links
+                      </label>
+                      <SocialLinksEditor
+                        values={form.socialLinks}
+                        onChange={(values) => setForm((f) => ({ ...f, socialLinks: values }))}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
 
               {step === 4 && (
+                <motion.div
+                  key="requirements"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                >
+                  <div className="mb-4">
+                    <h2 className="text-lg font-semibold text-slate-900">Requirements</h2>
+                    <p className="mt-1 text-sm text-slate-600">
+                      Create a mini-questionnaire clients must complete after ordering. This helps you start fast with the right inputs.
+                    </p>
+                  </div>
+
+                  <RequirementsEditor
+                    items={form.requirements}
+                    onAdd={addRequirement}
+                    onUpdate={updateRequirement}
+                    onRemove={removeRequirement}
+                    onAddMCOption={addMCOption}
+                    onRemoveMCOption={removeMCOption}
+                  />
+                </motion.div>
+              )}
+
+              {step === 5 && (
                 <motion.div
                   key="preview"
                   initial={{ opacity: 0, y: 8 }}
@@ -895,6 +1025,42 @@ export default function FreelancerOnboardingPage() {
                     </div>
                   </>
                 )}
+
+                {/* Preview Requirements */}
+                {form.requirements.length > 0 && (
+                  <>
+                    <div className="mt-6 text-xs uppercase tracking-wide text-slate-500">
+                      Requirements (client sees after ordering)
+                    </div>
+                    <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                      {form.requirements.map((r) => (
+                        <li key={r.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                          <div className="text-xs text-slate-500">
+                            {r.type.replace("_", " ")} {r.required ? "• required" : ""}
+                          </div>
+                          {r.type === "instructions" ? (
+                            <div className="mt-1">{r.content}</div>
+                          ) : (
+                            <>
+                              <div className="font-medium">{r.question}</div>
+                              {r.type === "multiple_choice" && r.options?.length ? (
+                                <div className="mt-1 text-slate-600">
+                                  Options: {r.options.join(", ")}
+                                </div>
+                              ) : null}
+                              {r.type === "file" && (
+                                <div className="mt-1 text-slate-600">
+                                  Accepts: {(r.accepts || []).join(", ") || "any"} • Max files:{" "}
+                                  {r.maxFiles || 1}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
               </motion.div>
             </div>
           </aside>
@@ -902,6 +1068,264 @@ export default function FreelancerOnboardingPage() {
       </div>
     </div>
   );
+}
+
+/* ---------------- Requirements Editor ---------------- */
+function RequirementsEditor({
+  items,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onAddMCOption,
+  onRemoveMCOption,
+}: {
+  items: RequirementItem[];
+  onAdd: (type: RequirementType) => void;
+  onUpdate: (id: string, patch: Partial<RequirementItem>) => void;
+  onRemove: (id: string) => void;
+  onAddMCOption: (id: string, value: string) => void;
+  onRemoveMCOption: (id: string, value: string) => void;
+}) {
+  const [mcDraft, setMcDraft] = useState<Record<string, string>>({});
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50"
+          onClick={() => onAdd("text")}
+        >
+          + Text question
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50"
+          onClick={() => onAdd("textarea")}
+        >
+          + Long answer
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50"
+          onClick={() => onAdd("multiple_choice")}
+        >
+          + Multiple choice
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50"
+          onClick={() => onAdd("file")}
+        >
+          + File upload
+        </button>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50"
+          onClick={() => onAdd("instructions")}
+        >
+          + Instructions box
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-4">
+        {items.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-slate-300 bg-white p-4 text-sm text-slate-600">
+            No requirements yet. Add a question above to get started.
+          </div>
+        ) : null}
+
+        {items.map((r) => (
+          <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-semibold text-slate-900">
+                {labelForType(r.type)}
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1 text-xs text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!!r.required}
+                    onChange={(e) => onUpdate(r.id, { required: e.target.checked })}
+                  />
+                  Required
+                </label>
+                <button
+                  type="button"
+                  className="text-sm text-red-600 hover:underline"
+                  onClick={() => onRemove(r.id)}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+
+            {/* Common fields */}
+            {r.type !== "instructions" ? (
+              <>
+                <label className="mt-3 block text-xs font-medium text-slate-700">
+                  Question / Prompt
+                </label>
+                <input
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+                  value={r.question || ""}
+                  onChange={(e) => onUpdate(r.id, { question: e.target.value })}
+                  placeholder="What do you need from the client?"
+                />
+                {(r.type === "text" || r.type === "textarea") && (
+                  <>
+                    <label className="mt-3 block text-xs font-medium text-slate-700">
+                      Placeholder (optional)
+                    </label>
+                    <input
+                      className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+                      value={r.placeholder || ""}
+                      onChange={(e) => onUpdate(r.id, { placeholder: e.target.value })}
+                      placeholder="e.g., https://example.com"
+                    />
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                <label className="mt-3 block text-xs font-medium text-slate-700">
+                  Instructions
+                </label>
+                <textarea
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+                  rows={4}
+                  value={r.content || ""}
+                  onChange={(e) => onUpdate(r.id, { content: e.target.value })}
+                  placeholder="Describe what clients should provide and any tips to help you start quickly."
+                />
+              </>
+            )}
+
+            {/* Multiple choice */}
+            {r.type === "multiple_choice" && (
+              <div className="mt-3">
+                <label className="text-xs font-medium text-slate-700">
+                  Options
+                </label>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {(r.options || []).map((o) => (
+                    <span
+                      key={o}
+                      className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-emerald-800 ring-1 ring-emerald-200"
+                    >
+                      {o}
+                      <button
+                        type="button"
+                        className="text-emerald-700/70 hover:text-emerald-900"
+                        onClick={() => onRemoveMCOption(r.id, o)}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <input
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+                    placeholder="Add an option and press Enter"
+                    value={mcDraft[r.id] || ""}
+                    onChange={(e) =>
+                      setMcDraft((m) => ({ ...m, [r.id]: e.target.value }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        const val = (mcDraft[r.id] || "").trim();
+                        if (val) onAddMCOption(r.id, val);
+                        setMcDraft((m) => ({ ...m, [r.id]: "" }));
+                      }
+                    }}
+                  />
+                  <label className="flex items-center gap-1 text-xs text-slate-700 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={!!r.allowMultiple}
+                      onChange={(e) =>
+                        onUpdate(r.id, { allowMultiple: e.target.checked })
+                      }
+                    />
+                    Allow multiple
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* File upload meta */}
+            {r.type === "file" && (
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="text-xs font-medium text-slate-700">
+                    Accept file types (comma-separated extensions)
+                  </label>
+                  <input
+                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+                    value={(r.accepts || []).join(", ")}
+                    onChange={(e) =>
+                      onUpdate(r.id, {
+                        accepts: e.target.value
+                          .split(",")
+                          .map((s) => s.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    placeholder=".png, .jpg, .jpeg, .pdf"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-700">
+                    Max files
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+                    value={r.maxFiles || 1}
+                    onChange={(e) =>
+                      onUpdate(r.id, { maxFiles: Math.max(1, +e.target.value || 1) })
+                    }
+                    placeholder="1"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Helper text */}
+            <label className="mt-3 block text-xs font-medium text-slate-700">
+              Helper text (optional)
+            </label>
+            <input
+              className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 outline-none ring-emerald-500 focus:ring-2"
+              value={r.helperText || ""}
+              onChange={(e) => onUpdate(r.id, { helperText: e.target.value })}
+              placeholder="Tips or clarification shown below the field"
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function labelForType(t: RequirementType) {
+  switch (t) {
+    case "text":
+      return "Text question";
+    case "textarea":
+      return "Long answer";
+    case "multiple_choice":
+      return "Multiple choice";
+    case "file":
+      return "File upload";
+    case "instructions":
+      return "Instructions box";
+    default:
+      return "Requirement";
+  }
 }
 
 /* ---- Service Multi Select (checkbox chips) ---- */
@@ -1119,6 +1543,15 @@ function EyeIcon(props: React.SVGProps<SVGSVGElement>) {
         strokeWidth="1.5"
       />
       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.5" />
+    </svg>
+  );
+}
+function ClipboardIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" {...props}>
+      <rect x="7" y="3" width="10" height="4" rx="1" stroke="currentColor" strokeWidth="1.5" />
+      <rect x="4" y="5" width="16" height="16" rx="2" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 10h8M8 14h8" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );
 }

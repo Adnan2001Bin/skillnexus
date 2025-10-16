@@ -22,6 +22,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
+
 type RatePlan = {
   type: "Basic" | "Standard" | "Premium";
   price: number;
@@ -32,6 +33,26 @@ type PortfolioItem = {
   description: string;
   imageUrl?: string | null;
   projectUrl?: string | null;
+};
+
+/* NEW: Requirement types (mirror what you save in DB) */
+type RequirementType = "text" | "textarea" | "multiple_choice" | "file" | "instructions";
+type RequirementItem = {
+  id: string;
+  type: RequirementType;
+  required?: boolean;
+  helperText?: string | null;
+  // question-based
+  question?: string | null;
+  placeholder?: string | null;
+  // multiple choice
+  options?: string[];
+  allowMultiple?: boolean;
+  // file meta
+  accepts?: string[];
+  maxFiles?: number;
+  // instructions
+  content?: string | null;
 };
 
 type Profile = {
@@ -54,6 +75,9 @@ type Profile = {
   whatIOffer?: string[];
   socialLinks?: { platform: string; url: string }[];
   languageProficiency?: string[];
+
+  /* NEW: requirements exposed on profile */
+  requirements?: RequirementItem[];
 
   approvalStatus: "pending" | "approved" | "rejected";
   rejectionReason?: string | null;
@@ -252,7 +276,7 @@ export default function FreelancerProfilePage() {
           <div className="grid gap-6 p-6 md:grid-cols-[2fr_1fr]">
             {/* Left column */}
             <div className="space-y-6">
-              {/* REJECTION DETAILS block inside the card too (optional, keeps UX consistent) */}
+              {/* REJECTION DETAILS block (optional duplicate) */}
               {p.approvalStatus === "rejected" && (
                 <Block title="Rejection details">
                   <div className="flex items-start gap-3 text-sm">
@@ -324,6 +348,78 @@ export default function FreelancerProfilePage() {
               {p.aboutThisGig && (
                 <Block title="About this gig">
                   <p className="text-sm text-slate-700">{p.aboutThisGig}</p>
+                </Block>
+              )}
+
+              {/* NEW: Requirements */}
+              {(p.requirements?.length ?? 0) > 0 && (
+                <Block title="Requirements (shown to clients after order)">
+                  <ul className="space-y-3">
+                    {p.requirements!.map((r) => (
+                      <li
+                        key={r.id}
+                        className="rounded-lg border border-slate-200 bg-slate-50 p-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="text-xs uppercase tracking-wide text-slate-500">
+                            {prettyReqType(r.type)}
+                          </div>
+                          {r.required ? (
+                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] text-emerald-700 ring-1 ring-emerald-200">
+                              Required
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700 ring-1 ring-slate-200">
+                              Optional
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Instructions content */}
+                        {r.type === "instructions" ? (
+                          <div className="mt-2 text-sm text-slate-700 whitespace-pre-wrap">
+                            {r.content}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mt-1 font-medium text-slate-900">
+                              {r.question}
+                            </div>
+                            {r.helperText && (
+                              <div className="mt-1 text-xs text-slate-600">
+                                {r.helperText}
+                              </div>
+                            )}
+
+                            {/* Multiple choice options */}
+                            {r.type === "multiple_choice" && r.options?.length ? (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {r.options.map((opt) => (
+                                  <span
+                                    key={opt}
+                                    className="rounded-full bg-white px-2.5 py-1 text-xs text-slate-700 ring-1 ring-slate-200"
+                                  >
+                                    {opt}
+                                  </span>
+                                ))}
+                                <span className="text-[11px] text-slate-500">
+                                  {r.allowMultiple ? "Multiple selections allowed" : "Single selection"}
+                                </span>
+                              </div>
+                            ) : null}
+
+                            {/* File meta */}
+                            {r.type === "file" && (
+                              <div className="mt-2 text-xs text-slate-600">
+                                Accepts: {(r.accepts || []).length ? r.accepts!.join(", ") : "any"} • Max files:{" "}
+                                {r.maxFiles || 1}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </Block>
               )}
 
@@ -527,7 +623,26 @@ function computeProgress(p: Profile | null): number {
     Array.isArray(p.ratePlans) && p.ratePlans.some((r) => r.price > 0),
     Array.isArray(p.portfolio) && p.portfolio.length >= 1,
     !!p.aboutThisGig && p.aboutThisGig.length > 50,
+    // Optionally include requirements in progress:
+    // Array.isArray(p.requirements) && p.requirements.length > 0,
   ];
   const score = checks.filter(Boolean).length;
   return Math.round((score / checks.length) * 100);
+}
+
+function prettyReqType(t: RequirementType) {
+  switch (t) {
+    case "text":
+      return "Text question";
+    case "textarea":
+      return "Long answer";
+    case "multiple_choice":
+      return "Multiple choice";
+    case "file":
+      return "File upload";
+    case "instructions":
+      return "Instructions";
+    default:
+      return "Requirement";
+  }
 }

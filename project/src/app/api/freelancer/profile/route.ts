@@ -64,6 +64,9 @@ export async function GET() {
       socialLinks: user.socialLinks ?? [],
       languageProficiency: user.languageProficiency ?? [],
 
+      // NEW: Requirements
+      requirements: user.requirements ?? [],
+
       // Moderation
       approvalStatus: user.approvalStatus,
       rejectionReason: user.rejectionReason ?? null,
@@ -75,7 +78,7 @@ export async function GET() {
 
     return NextResponse.json({ success: true, profile }, { status: 200 });
   } catch (e) {
-    console.error("GET /api/freelancer/profile error", e);
+    console.error("GET /api/freelancer/me error", e);
     return NextResponse.json(
       { success: false, message: "Failed to load profile" },
       { status: 500 }

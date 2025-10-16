@@ -18,6 +18,39 @@ export interface IPortfolioItem {
   projectUrl?: string | null;
 }
 
+/* NEW: Requirements */
+export type RequirementType =
+  | "text"
+  | "textarea"
+  | "multiple_choice"
+  | "file"
+  | "instructions";
+
+export interface IRequirementItem {
+  id: string;
+  type: RequirementType;
+  // common
+  required?: boolean;
+  helperText?: string | null;
+
+  // text / textarea / mc / file
+  question?: string | null;
+
+  // text / textarea
+  placeholder?: string | null;
+
+  // multiple choice
+  options?: string[];
+  allowMultiple?: boolean;
+
+  // file
+  accepts?: string[];
+  maxFiles?: number;
+
+  // instructions
+  content?: string | null;
+}
+
 /* ------------ User ------------ */
 export interface IUser extends Document {
   _id: Types.ObjectId;
@@ -52,6 +85,9 @@ export interface IUser extends Document {
   socialLinks?: { platform: string; url: string }[];
   languageProficiency?: string[];
 
+  // NEW: Requirements
+  requirements?: IRequirementItem[];
+
   // Approval & moderation
   approvalStatus: "pending" | "approved" | "rejected"; // indexed
   rejectionReason?: string | null;
@@ -62,6 +98,57 @@ export interface IUser extends Document {
   createdAt: Date;
   updatedAt: Date;
 }
+
+const RequirementSchema = new Schema<IRequirementItem>(
+  {
+    id: { type: String, required: true },
+    type: {
+      type: String,
+      enum: ["text", "textarea", "multiple_choice", "file", "instructions"],
+      required: true,
+    },
+    required: { type: Boolean, default: true },
+    helperText: { type: String, default: "" },
+
+    question: { type: String, default: null },
+    placeholder: { type: String, default: null },
+
+    options: { type: [String], default: [] },
+    allowMultiple: { type: Boolean, default: false },
+
+    accepts: { type: [String], default: [] },
+    maxFiles: { type: Number, default: 1 },
+
+    content: { type: String, default: null },
+  },
+  { _id: false }
+);
+
+const RatePlanSchema = new Schema<IRatePlan>(
+  {
+    type: {
+      type: String,
+      enum: ["Basic", "Standard", "Premium"],
+      required: true,
+    },
+    price: { type: Number, required: true, min: 0 },
+    description: { type: String, required: true },
+    whatsIncluded: { type: [String], required: true, default: [] },
+    deliveryDays: { type: Number, required: true, min: 1 },
+    revisions: { type: Number, required: true, min: 0 },
+  },
+  { _id: false }
+);
+
+const PortfolioItemSchema = new Schema<IPortfolioItem>(
+  {
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    imageUrl: { type: String, default: null },
+    projectUrl: { type: String, default: null },
+  },
+  { _id: false }
+);
 
 const UserSchema = new Schema<IUser>(
   {
@@ -122,38 +209,15 @@ const UserSchema = new Schema<IUser>(
     category: { type: String, default: null, index: true },
     services: { type: [String], default: [] },
     skills: { type: [String], default: [] },
-    portfolio: {
-      type: [
-        {
-          title: { type: String, required: true },
-          description: { type: String, required: true },
-          imageUrl: { type: String, default: null },
-          projectUrl: { type: String, default: null },
-        },
-      ],
-      default: [],
-    },
-    ratePlans: {
-      type: [
-        {
-          type: {
-            type: String,
-            enum: ["Basic", "Standard", "Premium"],
-            required: true,
-          },
-          price: { type: Number, required: true, min: 0 },
-          description: { type: String, required: true },
-          whatsIncluded: { type: [String], required: true, default: [] },
-          deliveryDays: { type: Number, required: true, min: 1 },
-          revisions: { type: Number, required: true, min: 0 },
-        },
-      ],
-      default: [],
-    },
+    portfolio: { type: [PortfolioItemSchema], default: [] },
+    ratePlans: { type: [RatePlanSchema], default: [] },
     aboutThisGig: { type: String, default: null },
     whatIOffer: { type: [String], default: [] },
     socialLinks: { type: [{ platform: String, url: String }], default: [] },
     languageProficiency: { type: [String], default: [] },
+
+    // NEW: requirements
+    requirements: { type: [RequirementSchema], default: [] },
 
     // Approval & moderation
     approvalStatus: {
@@ -170,22 +234,15 @@ const UserSchema = new Schema<IUser>(
 );
 
 /* ---------- Virtuals ---------- */
-// Optional: make `id` mirror `_id` as string
 UserSchema.virtual("id").get(function (this: IUser) {
   return this._id.toHexString();
 });
 
 /* ---------- Serialization ---------- */
-// No version key, keep virtuals. No need to delete sensitive fields because we used `select: false`.
 UserSchema.set("toJSON", { virtuals: true, versionKey: false });
 UserSchema.set("toObject", { virtuals: true, versionKey: false });
 
 /* ---------- Indexes ---------- */
-/**
- * Avoid duplicate index warnings:
- * - We already set `index: true` on field defs for `email`, `role`, `category`, `approvalStatus`.
- * - Keep a single text index for search below.
- */
 UserSchema.index({
   userName: "text",
   email: "text",
@@ -199,10 +256,3 @@ const UserModel =
   mongoose.model<IUser>("User", UserSchema);
 
 export default UserModel;
-
-/* ---------- Notes ----------
-- When you need the password (e.g., login), explicitly select it:
-    const user = await UserModel.findOne({ email }).select("+password");
-- Same if you ever need verification fields:
-    .select("+verificationCode +verificationCodeExpires")
-*/
