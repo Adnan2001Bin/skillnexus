@@ -7,6 +7,18 @@ import c_icon6 from "../../public/Catagories/Business.png";
 import c_icon7 from "../../public/Catagories/Writing & Translation.png";
 import c_icon8 from "../../public/Catagories/Consulting.png";
 
+
+import p_icon1 from "../../public/popular-services/19362653.jpg";
+import p_icon2 from "../../public/popular-services/2176762.jpg";
+import p_icon3 from "../../public/popular-services/3405349.jpg";
+import p_icon4 from "../../public/popular-services/24559.jpg";
+import p_icon5 from "../../public/popular-services/19198406.jpg";
+import p_icon6 from "../../public/popular-services/8852115.jpg";
+import p_icon7 from "../../public/popular-services/2336.jpg";
+import p_icon8 from "../../public/popular-services/5686602.jpg";
+import p_icon9 from "../../public/popular-services/5396346.jpg";
+
+
 export const categories = [
   { value: "programming_tech", label: "Programming & Tech",icon: c_icon1 },
   { value: "graphics_design", label: "Graphics & Design" ,icon: c_icon2},
@@ -212,3 +224,60 @@ export const servicesByCategory: { [key: string]: string[] } = {
     "Project management",
   ],
 };
+
+export const popularServices = [
+  {
+    id: "1",
+    title: "Web application development",
+    icon: p_icon1,
+    value: "programming_tech",
+  },
+  {
+    id: "2",
+    title: "Logo Design",
+    icon: p_icon2,
+    value: "graphics_design",
+  },
+  {
+    id: "3",
+    title: "E-Commerce Marketing",
+    icon: p_icon3,
+    value: "digital_marketing",
+  },
+  {
+    id: "4",
+    title: "3D animation",
+    icon: p_icon4,
+    value: "video_animation",
+  },
+  {
+    id: "5",
+    title: "AI model training and optimization",
+    icon: p_icon5,
+    value: "ai_services",
+  },
+  {
+    id: "6",
+    title: "Article writing",
+    icon: p_icon6,
+    value: "writing_translation",
+  },
+   {
+    id: "7",
+    title: "2D animation",
+    icon: p_icon7,
+    value: "writing_translation",
+  },
+  {
+    id: "8",
+    title: "UI/UX design",
+    icon: p_icon8,
+    value: "writing_translation",
+  },
+  {
+    id: "9",
+    title: "Blog writing Illustration",
+    icon: p_icon9,
+    value: "writing_translation",
+  },
+];

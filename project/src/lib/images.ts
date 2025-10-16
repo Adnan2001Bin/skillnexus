@@ -11,6 +11,8 @@ import fbg5 from "../../public/backgrounds/StockCake-AI_Services_Images_and_Phot
 import fbg6 from "../../public/backgrounds/StockCake-Business_Images_and_Photos_1760436994.jpg"
 import fbg7 from "../../public/backgrounds/StockCake-Writing_Translation_Images_and_Photos_1760437117.jpg"
 import fbg8 from "../../public/backgrounds/StockCake-Consultation_in_monochrome_1760438249.jpg"
+import image1 from "../../public/component/ChatGPT Image Oct 15, 2025, 08_05_34 PM.png"
+import image2 from "../../public/component/ChatGPT Image Oct 15, 2025, 08_46_19 PM.png"
 export const Images = {
   logo,
   logo1,
@@ -24,5 +26,7 @@ export const Images = {
   fbg5,
   fbg6,
   fbg7,
-  fbg8
+  fbg8,
+  image1,
+  image2
 }

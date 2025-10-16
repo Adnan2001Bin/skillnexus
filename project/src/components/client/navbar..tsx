@@ -1,3 +1,4 @@
+// src/components/common/ClientNavbar.tsx
 "use client";
 
 import * as React from "react";
@@ -28,12 +29,21 @@ const publicLinks: LinkItem[] = [
 ];
 
 export default function ClientNavbar() {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
   const router = useRouter();
   const { data: session, status } = useSession();
   const isAuthed = status === "authenticated";
 
-  // —— NEW: fetch client profile for avatar ——
+  // Minimal routes: show only logo and force solid nav
+  const minimalPaths = new Set([
+    "/sign-in",
+    "/sign-up",
+    "/onboarding/client",
+    "/onboarding/freelancer",
+  ]);
+  const isMinimal = minimalPaths.has(pathname);
+
+  // —— fetch client profile for avatar ——
   const [clientProfile, setClientProfile] = React.useState<{
     userName?: string;
     email?: string;
@@ -77,7 +87,7 @@ export default function ClientNavbar() {
     (typeof sessionUser?.image === "string" ? sessionUser.image : "") ||
     "/images/avatar-placeholder.png";
 
-  // scroll style control + solid on detail
+  // scroll style control + solid on detail (ignored on minimal)
   const [scrolled, setScrolled] = React.useState(false);
   React.useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -86,9 +96,11 @@ export default function ClientNavbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
   const isFreelancerDetail =
-    pathname?.startsWith("/find-freelancers/") &&
+    pathname.startsWith("/find-freelancers/") &&
     pathname.split("/").filter(Boolean).length === 2;
-  const solidNav = isFreelancerDetail || scrolled;
+
+  // Force solid on minimal; else solid on scroll or detail
+  const solidNav = isMinimal || isFreelancerDetail || scrolled;
 
   // gated nav
   const gated = new Set<string>(["/find-freelancers", "/jobs", "/client/messages"]);
@@ -109,6 +121,28 @@ export default function ClientNavbar() {
     ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
     : "bg-white/15 text-white ring-1 ring-white/30";
 
+  // ——— Minimal header (logo only) ———
+  if (isMinimal) {
+    return (
+      <header className={navWrap}>
+        <div className="mx-auto flex h-16 max-w-7xl items-center px-3 md:px-6">
+          <Link href="/home" className="flex items-center gap-2">
+            <Image
+              src={Images.logo}
+              alt="Logo"
+              width={140}
+              height={36}
+              className="h-9 w-auto object-contain"
+              priority
+            />
+          </Link>
+          {/* nothing else on minimal */}
+        </div>
+      </header>
+    );
+  }
+
+  // ——— Full header ———
   return (
     <header className={navWrap}>
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-3 md:gap-4 md:px-6">
@@ -135,7 +169,7 @@ export default function ClientNavbar() {
 
               <div className="mt-4 space-y-1">
                 {publicLinks.map((l) => {
-                  const active = pathname === l.href || pathname?.startsWith(l.href + "/");
+                  const active = pathname === l.href || pathname.startsWith(l.href + "/");
                   return (
                     <button
                       key={l.href}
@@ -197,7 +231,7 @@ export default function ClientNavbar() {
         {/* Center nav */}
         <nav className="mx-auto hidden items-center gap-1 md:flex">
           {publicLinks.map((l) => {
-            const active = pathname === l.href || pathname?.startsWith(l.href + "/");
+            const active = pathname === l.href || pathname.startsWith(l.href + "/");
             return (
               <button
                 key={l.href}
