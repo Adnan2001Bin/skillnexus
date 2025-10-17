@@ -26,21 +26,25 @@ export interface IRequirementAnswer {
   id: string;              // matches IRequirement.id
   text?: string | null;    // for text/textarea
   options?: string[];      // for multiple_choice
-  files?: { name: string; size?: number }[]; // demo only (no actual upload)
+  // IMPORTANT: include uploadthing URL so the freelancer can access files
+  files?: { name: string; size?: number; url: string }[];
 }
 
 export interface IOrder extends Document {
   _id: Types.ObjectId;
+
+  orderNumber?: string | null;    // short human-friendly id
 
   clientId?: Types.ObjectId | null;         // optional (if you later add auth)
   clientEmail?: string | null;              // optional
   freelancerId: Types.ObjectId;
   freelancerName: string;
   planType: "Basic" | "Standard" | "Premium";
-  price: number;
+  price: number; // price snapshot at purchase
 
   paymentStatus: "unpaid" | "paid";
-  projectStatus: "pending" | "approved" | "cancelled";
+  // added "completed" now so you won't need a migration later
+  projectStatus: "pending" | "approved" | "cancelled" | "completed";
 
   // snapshot the requirements at time of purchase so edits later don't affect past orders
   requirementsSnapshot: IRequirement[];
@@ -78,7 +82,8 @@ const RequirementAnswerSchema = new Schema<IRequirementAnswer>(
     text: { type: String, default: null },
     options: { type: [String], default: [] },
     files: {
-      type: [{ name: String, size: Number }],
+      // include URL for uploadthing
+      type: [{ name: String, size: Number, url: { type: String, required: true } }],
       default: [],
     },
   },
@@ -87,23 +92,44 @@ const RequirementAnswerSchema = new Schema<IRequirementAnswer>(
 
 const OrderSchema = new Schema<IOrder>(
   {
-    clientId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    orderNumber: { type: String, default: null, index: true },
+
+    clientId: { type: Schema.Types.ObjectId, ref: "User", default: null, index: true },
     clientEmail: { type: String, default: null },
 
-    freelancerId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    freelancerId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     freelancerName: { type: String, required: true },
 
     planType: { type: String, enum: ["Basic", "Standard", "Premium"], required: true },
     price: { type: Number, required: true, min: 0 },
 
-    paymentStatus: { type: String, enum: ["unpaid", "paid"], default: "unpaid" },
-    projectStatus: { type: String, enum: ["pending", "approved", "cancelled"], default: "pending" },
+    paymentStatus: { type: String, enum: ["unpaid", "paid"], default: "unpaid", index: true },
+    projectStatus: {
+      type: String,
+      enum: ["pending", "approved", "cancelled", "completed"],
+      default: "pending",
+      index: true,
+    },
 
     requirementsSnapshot: { type: [RequirementSchema], default: [] },
     requirementAnswers: { type: [RequirementAnswerSchema], default: [] },
   },
-  { timestamps: true }
+  { timestamps: true, versionKey: false }
 );
+
+// Helpful compound indexes for dashboards/lists
+OrderSchema.index({ clientId: 1, createdAt: -1 });
+OrderSchema.index({ freelancerId: 1, createdAt: -1 });
+
+/** Optional: generate a short orderNumber once on create */
+OrderSchema.pre("save", function (next) {
+  if (!this.isNew) return next();
+  if (!this.orderNumber) {
+    // very simple short id; replace with nanoid/uuid if you prefer
+    this.orderNumber = `ORD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  }
+  next();
+});
 
 const OrderModel =
   (mongoose.models.Order as mongoose.Model<IOrder>) ||

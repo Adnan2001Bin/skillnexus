@@ -14,12 +14,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, ShieldCheck, MapPin, Sparkles, X } from "lucide-react";
+import { UTFileUploader } from "@/components/client/UTFileUploader";
+
+/* ================= Types ================= */
 
 type RatePlan = {
   type: "Basic" | "Standard" | "Premium";
   price: number;
   description?: string;
 };
+
 type PortfolioItem = {
   title: string;
   description: string;
@@ -79,14 +83,21 @@ type Profile = {
   updatedAt: string;
 };
 
+/* ================= Page ================= */
+
 export default function PublicFreelancerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [loading, setLoading] = useState(true);
   const [p, setP] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // NEW: purchase state
+  // Purchase drawer state
   const [purchasePlan, setPurchasePlan] = useState<RatePlan | null>(null);
+
+  // Active order lock — only for the plan that's active
+  const [hasActiveOrder, setHasActiveOrder] = useState(false);
+  const [activeOrderStatus, setActiveOrderStatus] = useState<string | null>(null);
+  const [activePlanType, setActivePlanType] = useState<"Basic" | "Standard" | "Premium" | null>(null);
 
   const minPrice = useMemo(() => {
     if (!p?.ratePlans?.length) return null;
@@ -118,16 +129,39 @@ export default function PublicFreelancerDetailPage() {
     };
   }, [id]);
 
+  // Check if this client already has an active order with this freelancer (and which plan)
+  useEffect(() => {
+    if (!id) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/client/orders/active?freelancerId=${id}`, { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.message || "Failed to check orders");
+        if (!mounted) return;
+        setHasActiveOrder(!!json.active);
+        setActiveOrderStatus(json?.order?.projectStatus ?? null);
+        setActivePlanType(json?.order?.planType ?? null);
+      } catch {
+        // Fail-open: allow purchase if the check fails
+        if (!mounted) return;
+        setHasActiveOrder(false);
+        setActiveOrderStatus(null);
+        setActivePlanType(null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
+
   const firstName = (p?.userName || "Freelancer").split(" ")[0];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-6 font-sans">
       <div className="mb-5 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900">Freelancer</h1>
-        <Link
-          href="/find-freelancers"
-          className="text-sm text-emerald-700 underline"
-        >
+        <Link href="/find-freelancers" className="text-sm text-emerald-700 underline">
           ← Back to list
         </Link>
       </div>
@@ -141,14 +175,12 @@ export default function PublicFreelancerDetailPage() {
       )}
 
       {error && (
-        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
+        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>
       )}
 
       {!loading && p && (
         <div className="grid gap-6 md:grid-cols-[2fr_1fr]">
-          {/* LEFT */}
+          {/* ===== LEFT COLUMN ===== */}
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {/* Header */}
             <div className="border-b border-slate-200 p-6">
@@ -161,14 +193,10 @@ export default function PublicFreelancerDetailPage() {
                 />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-lg font-semibold text-slate-900">
-                      {p.userName}
-                    </span>
+                    <span className="truncate text-lg font-semibold text-slate-900">{p.userName}</span>
                     <span className="hidden text-slate-400 md:inline">·</span>
                     {p.categoryLabel ? (
-                      <span className="truncate text-sm text-slate-600">
-                        {p.categoryLabel}
-                      </span>
+                      <span className="truncate text-sm text-slate-600">{p.categoryLabel}</span>
                     ) : null}
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-600">
@@ -188,66 +216,64 @@ export default function PublicFreelancerDetailPage() {
                   {minPrice !== null && (
                     <div className="rounded-xl bg-emerald-50 px-3 py-2 text-sm ring-1 ring-emerald-200">
                       <div className="text-slate-600">Starting at</div>
-                      <div className="font-semibold text-slate-900">
-                        ${minPrice}
-                      </div>
+                      <div className="font-semibold text-slate-900">${minPrice}</div>
                     </div>
                   )}
                 </div>
               </div>
 
+              {/* CTA Row */}
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <Badge className="bg-emerald-600 hover:bg-emerald-600">
                   <Sparkles className="mr-1 h-3.5 w-3.5" />
                   Top Rated Services
                 </Badge>
                 {p.languageProficiency?.length ? (
-                  <div className="text-xs text-slate-600">
-                    Languages: {p.languageProficiency.join(", ")}
-                  </div>
+                  <div className="text-xs text-slate-600">Languages: {p.languageProficiency.join(", ")}</div>
                 ) : null}
                 <div className="ml-auto">
                   <Button asChild>
-                    <Link
-                      href={`/client/messages?to=${encodeURIComponent(
-                        p.userName
-                      )}`}
-                    >
+                    <Link href={`/client/messages?to=${encodeURIComponent(p.userName)}`}>
                       <MessageSquare className="mr-2 h-4 w-4" />
                       Message {firstName}
                     </Link>
                   </Button>
                 </div>
               </div>
+
+              {hasActiveOrder && activePlanType && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                  You already have an active <b>{activePlanType}</b> order with {firstName}
+                  {activeOrderStatus ? (
+                    <>
+                      {" "}
+                      (status: <b className="capitalize">{activeOrderStatus}</b>)
+                    </>
+                  ) : null}
+                  . You can still purchase other packages.
+                </div>
+              )}
             </div>
 
             {/* Body */}
             <div className="space-y-8 p-6">
               {p.bio && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
-                    About
-                  </div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">About</div>
                   <p className="mt-1 text-sm text-slate-700">{p.bio}</p>
                 </section>
               )}
 
               {p.aboutThisGig && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
-                    About this gig
-                  </div>
-                  <p className="mt-1 text-sm text-slate-700">
-                    {p.aboutThisGig}
-                  </p>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">About this gig</div>
+                  <p className="mt-1 text-sm text-slate-700">{p.aboutThisGig}</p>
                 </section>
               )}
 
               {(p.whatIOffer?.length ?? 0) > 0 && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
-                    What I offer
-                  </div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">What I offer</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {p.whatIOffer!.map((t) => (
                       <span
@@ -263,9 +289,7 @@ export default function PublicFreelancerDetailPage() {
 
               {(p.skills?.length ?? 0) > 0 && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
-                    Skills
-                  </div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Skills</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {p.skills!.map((t) => (
                       <span
@@ -281,9 +305,7 @@ export default function PublicFreelancerDetailPage() {
 
               {(p.services?.length ?? 0) > 0 && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
-                    Services
-                  </div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Services</div>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
                     {p.services!.map((s) => (
                       <li key={s}>{s}</li>
@@ -292,108 +314,98 @@ export default function PublicFreelancerDetailPage() {
                 </section>
               )}
 
-              {/* ===== Packages (updated buttons) ===== */}
+              {/* ===== Packages ===== */}
               {Array.isArray(p.ratePlans) && p.ratePlans.length > 0 && (
                 <section>
-                  <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">
-                    Packages
-                  </div>
+                  <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">Packages</div>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    {p.ratePlans!.map((rp) => (
-                      <div
-                        key={rp.type}
-                        className="group relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-b from-white to-emerald-50/40 p-5 shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-200"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <div className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                              {rp.type}
+                    {p.ratePlans!.map((rp) => {
+                      const disabled = rp.price <= 0 || (hasActiveOrder && activePlanType === rp.type);
+                      return (
+                        <div
+                          key={rp.type}
+                          className="group relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-b from-white to-emerald-50/40 p-5 shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-200"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <div className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
+                                {rp.type}
+                              </div>
+                              <div className="mt-1 text-2xl font-bold text-slate-900">
+                                {rp.price > 0 ? `$${rp.price}` : "—"}
+                                {rp.price > 0 && (
+                                  <span className="ml-1 text-xs font-medium text-slate-500">/project</span>
+                                )}
+                              </div>
                             </div>
-                            <div className="mt-1 text-2xl font-bold text-slate-900">
-                              {rp.price > 0 ? `$${rp.price}` : "—"}
-                              {rp.price > 0 && (
-                                <span className="ml-1 text-xs font-medium text-slate-500">
-                                  /project
-                                </span>
-                              )}
-                            </div>
+                            <Badge className="bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">
+                              Popular
+                            </Badge>
                           </div>
-                          <Badge className="bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">
-                            Popular
-                          </Badge>
-                        </div>
 
-                        {rp.description && (
-                          <p className="mt-3 line-clamp-3 text-sm text-slate-600">
-                            {rp.description}
-                          </p>
-                        )}
+                          {rp.description && (
+                            <p className="mt-3 line-clamp-3 text-sm text-slate-600">{rp.description}</p>
+                          )}
 
-                        <div className="mt-4 flex items-center gap-2">
-                          <Button
-                            className="w-full bg-emerald-600 hover:bg-emerald-700"
-                            onClick={() => setPurchasePlan(rp)}
-                            disabled={rp.price <= 0}
-                          >
-                            Purchase
-                          </Button>
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                          >
-                            <Link
-                              href={`/client/messages?to=${encodeURIComponent(
-                                p.userName
-                              )}&plan=${encodeURIComponent(
-                                rp.type
-                              )}&type=custom-offer`}
+                          <div className="mt-4 flex items-center gap-2">
+                            <Button
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:hover:bg-emerald-600"
+                              onClick={() => setPurchasePlan(rp)}
+                              disabled={disabled}
                             >
-                              Custom offer
-                            </Link>
-                          </Button>
+                              {hasActiveOrder && activePlanType === rp.type ? "Purchase (locked)" : "Purchase"}
+                            </Button>
+                            <Button
+                              asChild
+                              variant="outline"
+                              className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                              disabled={hasActiveOrder && activePlanType === rp.type}
+                            >
+                              <Link
+                                href={`/client/messages?to=${encodeURIComponent(
+                                  p.userName
+                                )}&plan=${encodeURIComponent(rp.type)}&type=custom-offer`}
+                              >
+                                Custom offer
+                              </Link>
+                            </Button>
+                          </div>
+
+                          {hasActiveOrder && activePlanType === rp.type && (
+                            <div className="mt-2 text-[11px] text-slate-500">
+                              You have an active {activePlanType} project with {firstName}. Finish it to purchase{" "}
+                              {activePlanType} again.
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               )}
 
               {/* ===== Portfolio ===== */}
               <section>
-                <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">
-                  Portfolio
-                </div>
+                <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">Portfolio</div>
 
                 {p.portfolio?.length ? (
                   <div className="relative">
                     <Carousel className="w-full">
                       <CarouselContent>
                         {p.portfolio!.map((it, idx) => (
-                          <CarouselItem
-                            key={`${it.title}-${idx}`}
-                            className="md:basis-1/2 lg:basis-1/3"
-                          >
+                          <CarouselItem key={`${it.title}-${idx}`} className="md:basis-1/2 lg:basis-1/3">
                             <div className="h-full overflow-hidden rounded-2xl border border-slate-200 bg-white">
                               {it.imageUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img
-                                  src={it.imageUrl}
-                                  alt={it.title}
-                                  className="h-48 w-full object-cover"
-                                />
+                                <img src={it.imageUrl} alt={it.title} className="h-48 w-full object-cover" />
                               ) : (
                                 <div className="flex h-48 w-full items-center justify-center bg-slate-50 text-slate-400">
                                   No image
                                 </div>
                               )}
                               <div className="p-3">
-                                <div className="truncate font-medium text-slate-900">
-                                  {it.title}
-                                </div>
-                                <div className="line-clamp-2 text-sm text-slate-600">
-                                  {it.description}
-                                </div>
+                                <div className="truncate font-medium text-slate-900">{it.title}</div>
+                                <div className="line-clamp-2 text-sm text-slate-600">{it.description}</div>
                                 {it.projectUrl && (
                                   <a
                                     href={it.projectUrl}
@@ -415,25 +427,19 @@ export default function PublicFreelancerDetailPage() {
                     </Carousel>
                   </div>
                 ) : (
-                  <div className="mt-2 text-sm text-slate-500">
-                    No portfolio items.
-                  </div>
+                  <div className="mt-2 text-sm text-slate-500">No portfolio items.</div>
                 )}
               </section>
             </div>
           </div>
 
-          {/* RIGHT column unchanged */}
+          {/* ===== RIGHT COLUMN (sticky) ===== */}
           <aside className="space-y-4 md:sticky md:top-4">
             <div className="rounded-2xl border border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 p-5 shadow-sm">
               {minPrice !== null && (
                 <div className="mb-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">
-                    Starting at
-                  </div>
-                  <div className="text-3xl font-bold text-slate-900">
-                    ${minPrice}
-                  </div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Starting at</div>
+                  <div className="text-3xl font-bold text-slate-900">${minPrice}</div>
                 </div>
               )}
 
@@ -443,21 +449,21 @@ export default function PublicFreelancerDetailPage() {
               </p>
 
               <div className="mt-3 flex flex-col gap-2">
+                {/* Messaging stays enabled */}
                 <Button asChild className="w-full">
-                  <Link
-                    href={`/client/messages?to=${encodeURIComponent(
-                      p.userName
-                    )}`}
-                  >
+                  <Link href={`/client/messages?to=${encodeURIComponent(p.userName)}`}>
                     <MessageSquare className="mr-2 h-4 w-4" />
                     Message {firstName}
                   </Link>
                 </Button>
+
+                {/* “Continue with …” is disabled only if that exact plan is active */}
                 {p.ratePlans?.[0] && (
                   <Button
                     asChild
                     variant="outline"
                     className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                    disabled={hasActiveOrder && activePlanType === p.ratePlans[0].type}
                   >
                     <Link
                       href={`/client/messages?to=${encodeURIComponent(
@@ -468,13 +474,19 @@ export default function PublicFreelancerDetailPage() {
                     </Link>
                   </Button>
                 )}
+
+                {hasActiveOrder && activePlanType && (
+                  <div className="text-[11px] text-slate-500">
+                    The {activePlanType} package is locked while your current {activePlanType} project is active.
+                  </div>
+                )}
               </div>
             </div>
           </aside>
         </div>
       )}
 
-      {/* NEW: Purchase Drawer */}
+      {/* ===== Purchase Drawer ===== */}
       {p && purchasePlan && (
         <PurchaseFlow
           freelancerId={p._id}
@@ -487,7 +499,7 @@ export default function PublicFreelancerDetailPage() {
   );
 }
 
-/* ================= Purchase Flow Drawer ================= */
+/* =============== Purchase Flow Drawer (compact requirements wizard) =============== */
 
 function PurchaseFlow({
   freelancerId,
@@ -504,13 +516,32 @@ function PurchaseFlow({
   const [busy, setBusy] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
-  const [status, setStatus] = useState<{ payment: "unpaid" | "paid"; project: "pending" | "approved" | "cancelled" }>({
+  const [status, setStatus] = useState<{
+    payment: "unpaid" | "paid";
+    project: "pending" | "approved" | "cancelled";
+  }>({
     payment: "unpaid",
     project: "pending",
   });
 
-  // local answers state
+  // local answers + wizard index
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  const [reqIndex, setReqIndex] = useState(0);
+
+  const totalReqs = requirements.length;
+  const currentReq = requirements[reqIndex];
+
+  const progressPct = useMemo(() => {
+    if (!totalReqs) return 0;
+    const answeredCount = requirements.reduce((acc, r) => {
+      const v = (answers as any)[r.id];
+      if (r.type === "instructions") return acc + 1;
+      if (typeof v === "string" && v.trim()) return acc + 1;
+      if (Array.isArray(v) && v.length > 0) return acc + 1;
+      return acc;
+    }, 0);
+    return Math.round((answeredCount / totalReqs) * 100);
+  }, [requirements, answers, totalReqs]);
 
   const createOrder = async () => {
     setBusy(true);
@@ -521,13 +552,16 @@ function PurchaseFlow({
         body: JSON.stringify({
           freelancerId,
           planType: plan.type,
-          // clientEmail: "demo@example.com", // optional
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Failed to create order");
       setOrderId(json.order.id);
-      setStatus((s) => ({ ...s, payment: json.order.paymentStatus, project: json.order.projectStatus }));
+      setStatus((s) => ({
+        ...s,
+        payment: json.order.paymentStatus,
+        project: json.order.projectStatus,
+      }));
       setStep("payment");
     } catch (e: any) {
       alert(e.message || "Could not create order");
@@ -540,7 +574,6 @@ function PurchaseFlow({
     if (!orderId) return;
     setBusy(true);
     try {
-      // demo card form could be validated here; we skip that
       const res = await fetch(`/api/client/orders/${orderId}/pay`, { method: "POST" });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.message || "Payment failed");
@@ -551,6 +584,7 @@ function PurchaseFlow({
       if (!getRes.ok) throw new Error(getJson?.message || "Failed to load order");
       setRequirements(getJson.order.requirementsSnapshot || []);
       setStatus((s) => ({ ...s, payment: "paid" }));
+      setReqIndex(0);
       setStep("requirements");
     } catch (e: any) {
       alert(e.message || "Payment error");
@@ -569,7 +603,7 @@ function PurchaseFlow({
           const a: any = { id };
           if (typeof v === "string") a.text = v;
           else if (Array.isArray(v) && v.every((x) => typeof x === "string")) a.options = v;
-          else if (Array.isArray(v) && v.every((x) => x && typeof x.name === "string")) a.files = v;
+          else if (Array.isArray(v) && v.every((x) => x && typeof x.url === "string")) a.files = v; // {name, size, url}
           return a;
         }),
       };
@@ -590,7 +624,7 @@ function PurchaseFlow({
     }
   };
 
-  /** Render fields according to requirement type (demo uploader keeps only name/size) */
+  /* ---------- Compact requirement renderer (single card wizard) ---------- */
   const renderRequirement = (r: Requirement) => {
     if (r.type === "instructions") {
       return (
@@ -615,7 +649,7 @@ function PurchaseFlow({
           ) : (
             <textarea
               className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 outline-none ring-emerald-500 focus:ring-2"
-              rows={4}
+              rows={5}
               value={answers[r.id] || ""}
               onChange={(e) => setAnswers((s) => ({ ...s, [r.id]: e.target.value }))}
             />
@@ -668,36 +702,36 @@ function PurchaseFlow({
       );
     }
     if (r.type === "file") {
-      const files: { name: string; size?: number }[] = answers[r.id] || [];
-      const onFiles = (list: FileList | null) => {
-        if (!list) return;
-        const arr = Array.from(list).map((f) => ({ name: f.name, size: f.size }));
-        setAnswers((s) => ({ ...s, [r.id]: arr }));
-      };
+      const current = (answers[r.id] || []) as { name: string; size?: number; url: string }[];
       return (
         <div>
           <label className="text-sm font-medium text-slate-800">
             {r.question} {r.required && <span className="text-red-600">*</span>}
           </label>
           {r.helperText && <div className="text-xs text-slate-500">{r.helperText}</div>}
-          <input
-            type="file"
-            multiple={!!(r.maxFiles && r.maxFiles > 1)}
-            accept={r.accepts?.join(",") || undefined}
-            onChange={(e) => onFiles(e.target.files)}
-            className="mt-1 block w-full text-sm"
-          />
-          {files.length > 0 && (
-            <ul className="mt-2 space-y-1 text-sm text-slate-700">
-              {files.map((f, i) => (
-                <li key={`${f.name}-${i}`}>• {f.name}{typeof f.size === "number" ? ` (${Math.round(f.size/1024)}KB)` : ""}</li>
+
+          <div className="mt-2">
+            <UTFileUploader
+              maxFiles={r.maxFiles ?? 5}
+              onChange={(uploaded: { name: string; size?: number; url: string }[]) =>
+                setAnswers((s) => ({ ...s, [r.id]: uploaded }))
+              }
+              note={`Accepts: ${((r.accepts as string[] | undefined) ?? ["images and pdf"]).join(", ")} • Max files: ${
+                r.maxFiles ?? 5
+              }`}
+            />
+          </div>
+
+          {current.length > 0 && (
+            <ul className="mt-2 space-y-1 text-sm text-slate-700 max-h-28 overflow-auto pr-1">
+              {current.map((f, i) => (
+                <li key={`${f.url}-${i}`}>
+                  • {f.name}
+                  {typeof f.size === "number" ? ` (${Math.round(f.size / 1024)}KB)` : ""}
+                </li>
               ))}
             </ul>
           )}
-          <div className="mt-1 text-xs text-slate-500">
-            Accepts: {(r.accepts || []).length ? r.accepts!.join(", ") : "any"} • Max files:{" "}
-            {r.maxFiles || 1}
-          </div>
         </div>
       );
     }
@@ -714,10 +748,7 @@ function PurchaseFlow({
             {step === "requirements" && "Requirements"}
             {step === "done" && "Order submitted"}
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50"
-          >
+          <button onClick={onClose} className="rounded-lg border border-slate-200 p-1 text-slate-600 hover:bg-slate-50">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -725,11 +756,11 @@ function PurchaseFlow({
         <div className="p-4">
           {/* Stepper */}
           <div className="mb-4 flex items-center gap-2 text-xs">
-            <StepBubble active={step === "checkout"} done={["payment","requirements","done"].includes(step)}>
+            <StepBubble active={step === "checkout"} done={["payment", "requirements", "done"].includes(step)}>
               1
             </StepBubble>
             <div className="h-px flex-1 bg-slate-200" />
-            <StepBubble active={step === "payment"} done={["requirements","done"].includes(step)}>
+            <StepBubble active={step === "payment"} done={["requirements", "done"].includes(step)}>
               2
             </StepBubble>
             <div className="h-px flex-1 bg-slate-200" />
@@ -808,25 +839,53 @@ function PurchaseFlow({
 
           {step === "requirements" && (
             <div className="space-y-4">
-              {requirements.length === 0 ? (
+              {/* Compact top summary + progress */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="text-slate-600">
+                    Question {Math.min(reqIndex + 1, totalReqs)} of {totalReqs}
+                  </div>
+                  <div className="font-medium text-slate-700">{progressPct}% complete</div>
+                </div>
+                <div className="mt-2 h-2 w-full rounded-full bg-white/70">
+                  <div className="h-2 rounded-full bg-emerald-500 transition-[width]" style={{ width: `${progressPct}%` }} />
+                </div>
+              </div>
+
+              {/* The single active requirement card */}
+              {totalReqs === 0 ? (
                 <div className="text-sm text-slate-600">
                   No requirements were provided by the freelancer. You can continue.
                 </div>
               ) : (
-                requirements.map((r) => (
-                  <div key={r.id} className="rounded-xl border border-slate-200 p-3">
-                    {renderRequirement(r)}
-                  </div>
-                ))
+                <div className="rounded-2xl border border-slate-200 p-4">{currentReq && renderRequirement(currentReq)}</div>
               )}
 
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setStep("payment")} disabled={busy}>
-                  Back
-                </Button>
-                <Button onClick={submitRequirements} disabled={busy}>
-                  {busy ? "Submitting..." : "Submit & finish"}
-                </Button>
+              {/* Sticky-ish controls */}
+              <div className="sticky bottom-0 z-10 -mx-4 border-t border-slate-200 bg-white/80 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-white/60">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-xs text-slate-500">{totalReqs > 0 && <>{reqIndex + 1}/{totalReqs}</>}</div>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => setStep("payment")} disabled={busy}>
+                      Back
+                    </Button>
+                    {reqIndex > 0 && (
+                      <Button variant="outline" onClick={() => setReqIndex((i) => Math.max(0, i - 1))} disabled={busy}>
+                        Previous
+                      </Button>
+                    )}
+                    {reqIndex < totalReqs - 1 && (
+                      <Button onClick={() => setReqIndex((i) => Math.min(totalReqs - 1, i + 1))} disabled={busy || totalReqs === 0}>
+                        Next
+                      </Button>
+                    )}
+                    {reqIndex === totalReqs - 1 && (
+                      <Button onClick={submitRequirements} disabled={busy}>
+                        {busy ? "Submitting..." : "Submit & finish"}
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -844,7 +903,8 @@ function PurchaseFlow({
                 </div>
               </div>
               <div className="text-sm text-slate-700">
-                Thanks! The freelancer will review your requirements and proceed. You’ll be notified once the project is approved or if more info is needed.
+                Thanks! The freelancer will review your requirements and proceed. You’ll be notified once the project is
+                approved or if more info is needed.
               </div>
               <div className="flex justify-end">
                 <Button onClick={onClose}>Close</Button>
@@ -857,13 +917,25 @@ function PurchaseFlow({
   );
 }
 
-function StepBubble({ active, done, children }: { active: boolean; done: boolean; children: React.ReactNode }) {
+/* =============== Small UI =============== */
+
+function StepBubble({
+  active,
+  done,
+  children,
+}: {
+  active: boolean;
+  done: boolean;
+  children: React.ReactNode;
+}) {
   return (
     <div
       className={`flex h-6 w-6 items-center justify-center rounded-full text-xs ${
-        active ? "bg-emerald-600 text-white"
-        : done ? "bg-emerald-100 text-emerald-700"
-        : "bg-slate-100 text-slate-600"
+        active
+          ? "bg-emerald-600 text-white"
+          : done
+          ? "bg-emerald-100 text-emerald-700"
+          : "bg-slate-100 text-slate-600"
       }`}
     >
       {children}
