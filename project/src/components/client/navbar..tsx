@@ -7,21 +7,39 @@ import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 import {
-  Bell, Menu, MessageSquare, Settings, LogOut, User, Plus, Briefcase, Users
+  Bell,
+  Menu,
+  MessageSquare,
+  Settings,
+  LogOut,
+  User,
+  Plus,
+  Briefcase,
+  Users,
+  Receipt, // 👈 added
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger,
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
 } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Images } from "@/lib/images";
 
 type LinkItem = { href: string; label: string; icon?: React.ReactNode };
+
 const publicLinks: LinkItem[] = [
   { href: "/find-freelancers", label: "Find Freelancers", icon: <Users className="h-4 w-4" /> },
   { href: "/jobs", label: "Jobs", icon: <Briefcase className="h-4 w-4" /> },
@@ -43,7 +61,7 @@ export default function ClientNavbar() {
   ]);
   const isMinimal = minimalPaths.has(pathname);
 
-  // —— fetch client profile for avatar ——
+  // —— fetch client profile for avatar —— 
   const [clientProfile, setClientProfile] = React.useState<{
     userName?: string;
     email?: string;
@@ -99,8 +117,8 @@ export default function ClientNavbar() {
     pathname.startsWith("/find-freelancers/") &&
     pathname.split("/").filter(Boolean).length === 2;
 
-  // Force solid on minimal; else solid on scroll or detail
-  const solidNav = isMinimal || isFreelancerDetail || scrolled;
+    const orderPaths = pathname.startsWith("/orders"); // Force solid on minimal; else solid on scroll or detail
+  const solidNav = isMinimal || isFreelancerDetail || scrolled || orderPaths;
 
   // gated nav
   const gated = new Set<string>(["/find-freelancers", "/jobs", "/client/messages"]);
@@ -299,18 +317,29 @@ export default function ClientNavbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
+
                   <DropdownMenuItem asChild>
                     <Link href="/client/profile" className="flex items-center">
                       <User className="mr-2 h-4 w-4" />
                       <span>Profile</span>
                     </Link>
                   </DropdownMenuItem>
+
                   <DropdownMenuItem asChild>
                     <Link href="/client/settings" className="flex items-center">
                       <Settings className="mr-2 h-4 w-4" />
                       <span>Settings</span>
                     </Link>
                   </DropdownMenuItem>
+
+                  {/* 👇 New: My orders */}
+                  <DropdownMenuItem asChild>
+                    <Link href="/client/orders" className="flex items-center">
+                      <Receipt className="mr-2 h-4 w-4" />
+                      <span>My orders</span>
+                    </Link>
+                  </DropdownMenuItem>
+
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={() => signOut({ callbackUrl: "/sign-in" })}
