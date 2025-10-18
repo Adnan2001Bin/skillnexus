@@ -41,17 +41,24 @@ export interface IOrder extends Document {
   planType: "Basic" | "Standard" | "Premium";
   price: number;
 
-  /** NEW: snapshot of deliveryDays for the selected plan */
+  /** Snapshot of selected plan's delivery window (in days) */
   deliveryDays: number;
 
   paymentStatus: "unpaid" | "paid";
   projectStatus: "pending" | "approved" | "cancelled" | "completed";
 
-  /** NEW: set when freelancer accepts */
+  /** When the freelancer accepts the order (used for timer) */
   acceptedAt?: Date | null;
 
+  /** Snapshot at purchase */
   requirementsSnapshot: IRequirement[];
+
+  /** Client answers */
   requirementAnswers: IRequirementAnswer[];
+
+  /** Virtuals */
+  deadlineAt?: Date | null; // computed from acceptedAt + deliveryDays
+  isOverdue?: boolean; // computed
 
   createdAt: Date;
   updatedAt: Date;
@@ -83,7 +90,13 @@ const RequirementAnswerSchema = new Schema<IRequirementAnswer>(
     text: { type: String, default: null },
     options: { type: [String], default: [] },
     files: {
-      type: [{ name: String, size: Number, url: { type: String, required: true } }],
+      type: [
+        {
+          name: { type: String, required: true },
+          size: { type: Number, default: undefined },
+          url: { type: String, required: true },
+        },
+      ],
       default: [],
     },
   },
@@ -103,7 +116,6 @@ const OrderSchema = new Schema<IOrder>(
     planType: { type: String, enum: ["Basic", "Standard", "Premium"], required: true },
     price: { type: Number, required: true, min: 0 },
 
-    /** NEW */
     deliveryDays: { type: Number, required: true, min: 1, default: 1 },
 
     paymentStatus: { type: String, enum: ["unpaid", "paid"], default: "unpaid", index: true },
@@ -114,7 +126,6 @@ const OrderSchema = new Schema<IOrder>(
       index: true,
     },
 
-    /** NEW */
     acceptedAt: { type: Date, default: null },
 
     requirementsSnapshot: { type: [RequirementSchema], default: [] },
@@ -123,16 +134,45 @@ const OrderSchema = new Schema<IOrder>(
   { timestamps: true, versionKey: false }
 );
 
+/* ---------- Helpful indexes ---------- */
 OrderSchema.index({ clientId: 1, createdAt: -1 });
 OrderSchema.index({ freelancerId: 1, createdAt: -1 });
+OrderSchema.index({ projectStatus: 1, acceptedAt: -1 });
 
+/* ---------- Short human-friendly order number on create ---------- */
 OrderSchema.pre("save", function (next) {
-  if (!this.isNew) return next();
-  if (!this.orderNumber) {
+  if (this.isNew && !this.orderNumber) {
     this.orderNumber = `ORD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   }
   next();
 });
+
+/* ---------- Auto-set acceptedAt when moving to approved ---------- */
+OrderSchema.pre("save", function (next) {
+  // If transitioning into approved and not yet set, stamp acceptedAt
+  if (this.isModified("projectStatus") && this.projectStatus === "approved" && !this.acceptedAt) {
+    this.acceptedAt = new Date();
+  }
+  next();
+});
+
+/* ---------- Virtuals for deadline / overdue ---------- */
+OrderSchema.virtual("deadlineAt").get(function (this: IOrder) {
+  if (!this.acceptedAt || !this.deliveryDays) return null;
+  const ms = this.deliveryDays * 24 * 60 * 60 * 1000;
+  return new Date(this.acceptedAt.getTime() + ms);
+});
+
+OrderSchema.virtual("isOverdue").get(function (this: IOrder) {
+  const deadline = (this as any).deadlineAt as Date | null;
+  if (!deadline) return false;
+  if (this.projectStatus === "completed" || this.projectStatus === "cancelled") return false;
+  return Date.now() > deadline.getTime();
+});
+
+/* ---------- Serialize virtuals ---------- */
+OrderSchema.set("toJSON", { virtuals: true });
+OrderSchema.set("toObject", { virtuals: true });
 
 const OrderModel =
   (mongoose.models.Order as mongoose.Model<IOrder>) ||

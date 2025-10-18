@@ -1,3 +1,4 @@
+// src/app/freelancer/orders/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -6,13 +7,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   CheckCircle2,
   XCircle,
-  SendHorizonal,
   Eye,
   Search,
   Download,
   FileText,
   Mail,
   Hourglass,
+  SendHorizonal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -27,8 +28,9 @@ import {
   AlertDialogTitle,
   AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
+import { DeliverProjectDialog } from "@/components/freelancer/DeliveryPanel";
 
-/* ================= Types ================= */
+/* ================= Types (unchanged) ================= */
 type RequirementFile = { name: string; size?: number; url: string };
 type RequirementAnswer = {
   id: string;
@@ -70,9 +72,14 @@ type OrderDetail = {
   requirementAnswers: RequirementAnswer[];
 };
 
-/* ================= Small helpers ================= */
-
-function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "green" | "amber" | "blue" | "red" }) {
+/* ================= Small helpers (unchanged) ================= */
+function Badge({
+  children,
+  tone = "slate",
+}: {
+  children: React.ReactNode;
+  tone?: "slate" | "green" | "amber" | "blue" | "red";
+}) {
   const map: Record<string, string> = {
     slate: "bg-slate-100 text-slate-700 ring-slate-200",
     green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
@@ -81,47 +88,37 @@ function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?:
     red: "bg-red-50 text-red-700 ring-red-200",
   };
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${map[tone]}`}>{children}</span>
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${map[tone]}`}>
+      {children}
+    </span>
   );
 }
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="text-xs uppercase tracking-wide text-slate-500">{children}</div>;
 }
 
-/** Live countdown hook (D/H/M/S) */
 function useCountdown(deadline: Date | null) {
   const [now, setNow] = useState(() => new Date());
-
   useEffect(() => {
     if (!deadline) return;
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, [deadline]);
-
-  if (!deadline) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, overdue: false, msLeft: 0 };
-  }
-
+  if (!deadline) return { days: 0, hours: 0, minutes: 0, seconds: 0, overdue: false, msLeft: 0 };
   const msLeft = deadline.getTime() - now.getTime();
   const overdue = msLeft < 0;
   const abs = Math.abs(msLeft);
-
   const days = Math.floor(abs / (24 * 60 * 60 * 1000));
   const hours = Math.floor((abs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
   const minutes = Math.floor((abs % (60 * 60 * 1000)) / (60 * 1000));
   const seconds = Math.floor((abs % (60 * 1000)) / 1000);
-
   return { days, hours, minutes, seconds, overdue, msLeft };
 }
 
-/** Pretty block showing D • H • M • S */
 function CountdownPills({ acceptedAt, deliveryDays }: { acceptedAt: string | null; deliveryDays: number }) {
-  if (!acceptedAt) {
-    return <div className="text-xs text-slate-500">Awaiting acceptance…</div>;
-  }
+  if (!acceptedAt) return <div className="text-xs text-slate-500">Awaiting acceptance…</div>;
   const deadline = new Date(new Date(acceptedAt).getTime() + deliveryDays * 24 * 60 * 60 * 1000);
   const { days, hours, minutes, seconds, overdue } = useCountdown(deadline);
-
   return (
     <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs ring-1 ${overdue ? "bg-red-50 text-red-700 ring-red-200" : "bg-slate-50 text-slate-700 ring-slate-200"}`}>
       <Hourglass className="h-3.5 w-3.5" />
@@ -135,7 +132,6 @@ function CountdownPills({ acceptedAt, deliveryDays }: { acceptedAt: string | nul
 }
 
 /* ================= Page ================= */
-
 export default function FreelancerOrdersPage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -147,6 +143,9 @@ export default function FreelancerOrdersPage() {
   const [viewId, setViewId] = useState<string | null>(null);
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+
+  // Dialog state
+  const [deliverId, setDeliverId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -176,7 +175,8 @@ export default function FreelancerOrdersPage() {
 
   const accept = async (id: string) => {
     const res = await fetch(`/api/freelancer/orders/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "accept" }),
     });
     const json = await res.json();
@@ -184,28 +184,19 @@ export default function FreelancerOrdersPage() {
       toast({ variant: "destructive", title: "Accept failed", description: json?.message || "Unable to accept order." });
       return;
     }
-    setRows(prev => prev.map(r => r.id === id ? { ...r, projectStatus: "approved", acceptedAt: new Date().toISOString() } : r));
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, projectStatus: "approved", acceptedAt: new Date().toISOString() } : r))
+    );
     toast({ title: "Order accepted", description: "The project is now in progress." });
   };
 
-  const deliver = async (id: string) => {
-    const res = await fetch(`/api/freelancer/orders/${id}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "deliver" }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      toast({ variant: "destructive", title: "Delivery failed", description: json?.message || "Unable to mark as delivered." });
-      return;
-    }
-    setRows(prev => prev.map(r => r.id === id ? { ...r, projectStatus: "completed" } : r));
-    toast({ title: "Order delivered", description: "The order is now marked completed." });
-  };
+  const openDeliver = (id: string) => setDeliverId(id);
 
   const reject = async () => {
     if (!rejectId) return;
     const res = await fetch(`/api/freelancer/orders/${rejectId}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "reject", reason: rejectReason }),
     });
     const json = await res.json();
@@ -213,7 +204,7 @@ export default function FreelancerOrdersPage() {
       toast({ variant: "destructive", title: "Reject failed", description: json?.message || "Unable to reject order." });
       return;
     }
-    setRows(prev => prev.map(r => r.id === rejectId ? { ...r, projectStatus: "cancelled" } : r));
+    setRows((prev) => prev.map((r) => (r.id === rejectId ? { ...r, projectStatus: "cancelled" } : r)));
     setRejectId(null);
     setRejectReason("");
     toast({ title: "Order rejected", description: "The client will be notified." });
@@ -221,6 +212,7 @@ export default function FreelancerOrdersPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-900">Orders</h1>
         <div className="flex items-center gap-2">
@@ -249,6 +241,7 @@ export default function FreelancerOrdersPage() {
         </div>
       </div>
 
+      {/* Table */}
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 text-left text-slate-600">
@@ -265,7 +258,9 @@ export default function FreelancerOrdersPage() {
           <tbody>
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">No orders found.</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  No orders found.
+                </td>
               </tr>
             )}
             <AnimatePresence initial={false}>
@@ -282,7 +277,9 @@ export default function FreelancerOrdersPage() {
                     className="border-t border-slate-200"
                   >
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{r.orderNumber || r.id.slice(-8).toUpperCase()}</div>
+                      <div className="font-medium text-slate-900">
+                        {r.orderNumber || r.id.slice(-8).toUpperCase()}
+                      </div>
                       <div className="text-xs text-slate-500">{new Date(r.createdAt).toLocaleString()}</div>
                     </td>
                     <td className="px-4 py-3">
@@ -295,22 +292,23 @@ export default function FreelancerOrdersPage() {
                       <div className="text-xs text-slate-500">${r.price} • {r.deliveryDays}d</div>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge tone={r.paymentStatus === "paid" ? "green" : "amber"}>
-                        {r.paymentStatus}
-                      </Badge>
+                      <Badge tone={r.paymentStatus === "paid" ? "green" : "amber"}>{r.paymentStatus}</Badge>
                     </td>
                     <td className="px-4 py-3">
                       <Badge
                         tone={
-                          r.projectStatus === "pending" ? "amber" :
-                          r.projectStatus === "approved" ? "blue" :
-                          r.projectStatus === "completed" ? "green" : "red"
+                          r.projectStatus === "pending"
+                            ? "amber"
+                            : r.projectStatus === "approved"
+                            ? "blue"
+                            : r.projectStatus === "completed"
+                            ? "green"
+                            : "red"
                         }
                       >
                         {r.projectStatus}
                       </Badge>
                     </td>
-
                     <td className="px-4 py-3">
                       {r.projectStatus === "approved" ? (
                         <CountdownPills acceptedAt={r.acceptedAt} deliveryDays={r.deliveryDays} />
@@ -318,7 +316,6 @@ export default function FreelancerOrdersPage() {
                         <div className="text-xs text-slate-500">—</div>
                       )}
                     </td>
-
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" size="sm" onClick={() => setViewId(r.id)} title="View">
@@ -332,7 +329,12 @@ export default function FreelancerOrdersPage() {
                         {canReject && (
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button variant="destructive" size="sm" onClick={() => setRejectId(r.id)} title="Reject">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setRejectId(r.id)}
+                                title="Reject"
+                              >
                                 <XCircle className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
@@ -351,7 +353,12 @@ export default function FreelancerOrdersPage() {
                                 onChange={(e) => setRejectReason(e.target.value)}
                               />
                               <AlertDialogFooter>
-                                <AlertDialogCancel onClick={() => { setRejectId(null); setRejectReason(""); }}>
+                                <AlertDialogCancel
+                                  onClick={() => {
+                                    setRejectId(null);
+                                    setRejectReason("");
+                                  }}
+                                >
                                   Cancel
                                 </AlertDialogCancel>
                                 <AlertDialogAction
@@ -365,7 +372,7 @@ export default function FreelancerOrdersPage() {
                           </AlertDialog>
                         )}
                         {canDeliver && (
-                          <Button size="sm" onClick={() => deliver(r.id)} title="Mark delivered">
+                          <Button size="sm" onClick={() => openDeliver(r.id)} title="Deliver">
                             <SendHorizonal className="h-4 w-4" />
                           </Button>
                         )}
@@ -379,19 +386,28 @@ export default function FreelancerOrdersPage() {
         </table>
       </div>
 
-      {error && (
-        <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
+      {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
+      {/* Order details drawer remains as-is */}
       <OrderDrawer id={viewId} onClose={() => setViewId(null)} />
+
+      {/* Deliver dialog */}
+      <DeliverProjectDialog
+        open={!!deliverId}
+        orderId={deliverId || ""}
+        onClose={() => setDeliverId(null)}
+        onDelivered={() => {
+          // Optimistically mark completed after successful submit
+          setRows((prev) => prev.map((r) => (r.id === (deliverId || "") ? { ...r, projectStatus: "completed" } : r)));
+          setDeliverId(null);
+          toast({ title: "Delivered", description: "Files and notes sent to the client." });
+        }}
+      />
     </div>
   );
 }
 
-/* ---------- Drawer (shows D/H/M/S and files) ---------- */
-
+/* ---------- Drawer (unchanged) ---------- */
 function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [o, setO] = useState<OrderDetail | null>(null);
@@ -474,7 +490,7 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
               </div>
             </div>
 
-            {/* Requirements + answers (with files view/download) */}
+            {/* Requirements + answers */}
             <div className="rounded-xl border border-slate-200 p-4">
               <SectionTitle>Requirements</SectionTitle>
               <div className="mt-3 space-y-4">
@@ -482,33 +498,27 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                   <div className="text-sm text-slate-500">No requirements provided for this order.</div>
                 )}
                 {o.requirementsSnapshot.map((rq) => {
-                  const ans = (o.requirementAnswers || []).find(a => a.id === rq.id);
+                  const ans = (o.requirementAnswers || []).find((a) => a.id === rq.id);
                   return (
                     <div key={rq.id} className="rounded-lg border border-slate-200 p-3">
                       {rq.type === "instructions" ? (
                         <>
                           <div className="text-xs font-medium text-slate-500">Instructions</div>
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">
-                            {(rq as any).content}
-                          </p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{(rq as any).content}</p>
                         </>
                       ) : (
                         <>
-                          <div className="text-sm font-semibold text-slate-900">
-                            {(rq as any).question || "Question"}
-                          </div>
+                          <div className="text-sm font-semibold text-slate-900">{(rq as any).question || "Question"}</div>
                           {(rq as any).helperText && (
                             <div className="text-xs text-slate-500">{(rq as any).helperText}</div>
                           )}
                           <div className="mt-2 text-sm">
                             {!ans && <div className="text-slate-500 italic">No answer</div>}
-
                             {ans?.text && (
                               <div className="rounded bg-slate-50 p-2 text-slate-800 whitespace-pre-wrap">
                                 {ans.text}
                               </div>
                             )}
-
                             {ans?.options && ans.options.length > 0 && (
                               <div className="flex flex-wrap gap-2">
                                 {ans.options.map((op) => (
@@ -518,7 +528,6 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                                 ))}
                               </div>
                             )}
-
                             {ans?.files && ans.files.length > 0 && (
                               <div className="mt-2">
                                 <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">Files</div>
@@ -527,26 +536,15 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                                     <li key={`${f.url}-${i}`} className="flex items-center justify-between gap-3 rounded border border-slate-200 p-2">
                                       <div className="flex items-center gap-2 min-w-0">
                                         <FileText className="h-4 w-4 text-slate-500" />
-                                        <a
-                                          href={f.url}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          className="truncate text-sm text-emerald-700 underline"
-                                        >
+                                        <a href={f.url} target="_blank" rel="noreferrer" className="truncate text-sm text-emerald-700 underline">
                                           {f.name}
                                         </a>
                                       </div>
                                       <div className="flex items-center gap-2 shrink-0">
                                         {typeof f.size === "number" && (
-                                          <span className="text-xs text-slate-500">
-                                            {Math.round(f.size / 1024)} KB
-                                          </span>
+                                          <span className="text-xs text-slate-500">{Math.round(f.size / 1024)} KB</span>
                                         )}
-                                        <a
-                                          href={f.url}
-                                          download
-                                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50"
-                                        >
+                                        <a href={f.url} download className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs hover:bg-slate-50">
                                           <Download className="h-3.5 w-3.5" /> Download
                                         </a>
                                       </div>
