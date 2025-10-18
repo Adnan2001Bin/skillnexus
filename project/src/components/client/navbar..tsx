@@ -16,7 +16,7 @@ import {
   Plus,
   Briefcase,
   Users,
-  Receipt, // 👈 added
+  Receipt,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -41,9 +41,17 @@ import { Images } from "@/lib/images";
 type LinkItem = { href: string; label: string; icon?: React.ReactNode };
 
 const publicLinks: LinkItem[] = [
-  { href: "/find-freelancers", label: "Find Freelancers", icon: <Users className="h-4 w-4" /> },
+  {
+    href: "/find-freelancers",
+    label: "Find Freelancers",
+    icon: <Users className="h-4 w-4" />,
+  },
   { href: "/jobs", label: "Jobs", icon: <Briefcase className="h-4 w-4" /> },
-  { href: "/client/messages", label: "Messages", icon: <MessageSquare className="h-4 w-4" /> },
+  {
+    href: "/client/messages",
+    label: "Messages",
+    icon: <MessageSquare className="h-4 w-4" />,
+  },
 ];
 
 export default function ClientNavbar() {
@@ -51,6 +59,14 @@ export default function ClientNavbar() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const isAuthed = status === "authenticated";
+
+  // ⛔️ Hide navbar on freelancer/admin areas (and subpaths).
+  // If you want exact match only, replace startsWith checks with strict equality.
+  const HIDE_PREFIXES = ["/freelancer", "/admin"];
+  const hideNavbar = HIDE_PREFIXES.some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+  if (hideNavbar) return null;
 
   // Minimal routes: show only logo and force solid nav
   const minimalPaths = new Set([
@@ -61,7 +77,7 @@ export default function ClientNavbar() {
   ]);
   const isMinimal = minimalPaths.has(pathname);
 
-  // —— fetch client profile for avatar —— 
+  // —— fetch client profile for avatar ——
   const [clientProfile, setClientProfile] = React.useState<{
     userName?: string;
     email?: string;
@@ -113,15 +129,20 @@ export default function ClientNavbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
   const isFreelancerDetail =
     pathname.startsWith("/find-freelancers/") &&
     pathname.split("/").filter(Boolean).length === 2;
 
-    const orderPaths = pathname.startsWith("/orders"); // Force solid on minimal; else solid on scroll or detail
+  const orderPaths = pathname.startsWith("/orders");
   const solidNav = isMinimal || isFreelancerDetail || scrolled || orderPaths;
 
   // gated nav
-  const gated = new Set<string>(["/find-freelancers", "/jobs", "/client/messages"]);
+  const gated = new Set<string>([
+    "/find-freelancers",
+    "/jobs",
+    "/client/messages",
+  ]);
   const go = (href: string) => {
     if (!isAuthed && gated.has(href)) {
       router.push(`/sign-in?callbackUrl=${encodeURIComponent(href)}`);
@@ -134,7 +155,9 @@ export default function ClientNavbar() {
     "fixed top-0 z-50 w-full transition-colors duration-300 " +
     (solidNav ? "bg-white text-slate-800 shadow" : "bg-transparent text-white");
   const linkBase = "rounded-lg px-3 py-2 text-sm transition";
-  const linkIdle = solidNav ? "text-slate-700 hover:bg-slate-100" : "text-white/90 hover:bg-white/10";
+  const linkIdle = solidNav
+    ? "text-slate-700 hover:bg-slate-100"
+    : "text-white/90 hover:bg-white/10";
   const linkActive = solidNav
     ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
     : "bg-white/15 text-white ring-1 ring-white/30";
@@ -154,7 +177,6 @@ export default function ClientNavbar() {
               priority
             />
           </Link>
-          {/* nothing else on minimal */}
         </div>
       </header>
     );
@@ -187,7 +209,8 @@ export default function ClientNavbar() {
 
               <div className="mt-4 space-y-1">
                 {publicLinks.map((l) => {
-                  const active = pathname === l.href || pathname.startsWith(l.href + "/");
+                  const active =
+                    pathname === l.href || pathname.startsWith(l.href + "/");
                   return (
                     <button
                       key={l.href}
@@ -209,13 +232,19 @@ export default function ClientNavbar() {
                     <Button asChild variant="outline" className="w-full">
                       <Link href="/sign-in">Sign in</Link>
                     </Button>
-                    <Button asChild className="w-full bg-emerald-500 hover:bg-emerald-600">
+                    <Button
+                      asChild
+                      className="w-full bg-emerald-500 hover:bg-emerald-600"
+                    >
                       <Link href="/sign-up">Sign up</Link>
                     </Button>
                   </div>
                 ) : (
                   <div className="pt-2">
-                    <Button className="w-full" onClick={() => go("/client/post-job")}>
+                    <Button
+                      className="w-full"
+                      onClick={() => go("/client/post-job")}
+                    >
                       <Plus className="mr-2 h-4 w-4" />
                       Post a job
                     </Button>
@@ -249,12 +278,15 @@ export default function ClientNavbar() {
         {/* Center nav */}
         <nav className="mx-auto hidden items-center gap-1 md:flex">
           {publicLinks.map((l) => {
-            const active = pathname === l.href || pathname.startsWith(l.href + "/");
+            const active =
+              pathname === l.href || pathname.startsWith(l.href + "/");
             return (
               <button
                 key={l.href}
                 onClick={() => go(l.href)}
-                className={`${linkBase} ${active ? linkActive : linkIdle} flex items-center gap-2`}
+                className={`${linkBase} ${
+                  active ? linkActive : linkIdle
+                } flex items-center gap-2`}
               >
                 {l.icon}
                 <span>{l.label}</span>
@@ -276,7 +308,10 @@ export default function ClientNavbar() {
             </>
           ) : (
             <>
-              <Button className="hidden md:inline-flex" onClick={() => go("/client/post-job")}>
+              <Button
+                className="hidden md:inline-flex"
+                onClick={() => go("/client/post-job")}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Post a job
               </Button>
@@ -332,7 +367,6 @@ export default function ClientNavbar() {
                     </Link>
                   </DropdownMenuItem>
 
-                  {/* 👇 New: My orders */}
                   <DropdownMenuItem asChild>
                     <Link href="/client/orders" className="flex items-center">
                       <Receipt className="mr-2 h-4 w-4" />
