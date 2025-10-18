@@ -13,15 +13,36 @@ import {
 } from "@/components/ui/carousel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { MessageSquare, ShieldCheck, MapPin, Sparkles, X } from "lucide-react";
+import {
+  MessageSquare,
+  ShieldCheck,
+  MapPin,
+  Sparkles,
+  X,
+  PackageCheck,
+  CheckCircle2,
+  Clock,
+  Repeat2,
+  Info,
+  FolderGit2,
+} from "lucide-react";
 import { UTFileUploader } from "@/components/client/UTFileUploader";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 
 /* ================= Types ================= */
 
 type RatePlan = {
   type: "Basic" | "Standard" | "Premium";
   price: number;
-  description?: string;
+  description: string;
+  whatsIncluded: string[];
+  deliveryDays: number;
+  revisions: number;
 };
 
 type PortfolioItem = {
@@ -159,8 +180,11 @@ export default function PublicFreelancerDetailPage() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 md:px-6 font-sans">
-      <div className="mb-5 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">Freelancer</h1>
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <PackageCheck className="h-6 w-6 text-emerald-600" />
+          <h1 className="text-2xl font-bold text-slate-900">Freelancer</h1>
+        </div>
         <Link href="/find-freelancers" className="text-sm text-emerald-700 underline">
           ← Back to list
         </Link>
@@ -212,14 +236,7 @@ export default function PublicFreelancerDetailPage() {
                     </span>
                   </div>
                 </div>
-                <div className="ml-auto hidden items-end justify-end text-right md:flex">
-                  {minPrice !== null && (
-                    <div className="rounded-xl bg-emerald-50 px-3 py-2 text-sm ring-1 ring-emerald-200">
-                      <div className="text-slate-600">Starting at</div>
-                      <div className="font-semibold text-slate-900">${minPrice}</div>
-                    </div>
-                  )}
-                </div>
+                {/* removed "Starting at" as requested */}
               </div>
 
               {/* CTA Row */}
@@ -243,14 +260,19 @@ export default function PublicFreelancerDetailPage() {
 
               {hasActiveOrder && activePlanType && (
                 <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                  You already have an active <b>{activePlanType}</b> order with {firstName}
-                  {activeOrderStatus ? (
-                    <>
-                      {" "}
-                      (status: <b className="capitalize">{activeOrderStatus}</b>)
-                    </>
-                  ) : null}
-                  . You can still purchase other packages.
+                  <div className="flex items-start gap-2">
+                    <Info className="mt-0.5 h-4 w-4" />
+                    <div>
+                      You already have an active <b>{activePlanType}</b> order with {firstName}
+                      {activeOrderStatus ? (
+                        <>
+                          {" "}
+                          (status: <b className="capitalize">{activeOrderStatus}</b>)
+                        </>
+                      ) : null}
+                      . You can still purchase other packages.
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -259,21 +281,27 @@ export default function PublicFreelancerDetailPage() {
             <div className="space-y-8 p-6">
               {p.bio && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">About</div>
-                  <p className="mt-1 text-sm text-slate-700">{p.bio}</p>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                    <FolderGit2 className="h-4 w-4" /> About
+                  </div>
+                  <p className="mt-2 text-sm text-slate-700">{p.bio}</p>
                 </section>
               )}
 
               {p.aboutThisGig && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">About this gig</div>
-                  <p className="mt-1 text-sm text-slate-700">{p.aboutThisGig}</p>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                    <PackageCheck className="h-4 w-4" /> About this gig
+                  </div>
+                  <p className="mt-2 text-sm text-slate-700">{p.aboutThisGig}</p>
                 </section>
               )}
 
               {(p.whatIOffer?.length ?? 0) > 0 && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">What I offer</div>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                    <CheckCircle2 className="h-4 w-4" /> What I offer
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {p.whatIOffer!.map((t) => (
                       <span
@@ -289,7 +317,9 @@ export default function PublicFreelancerDetailPage() {
 
               {(p.skills?.length ?? 0) > 0 && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Skills</div>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                    <Sparkles className="h-4 w-4" /> Skills
+                  </div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {p.skills!.map((t) => (
                       <span
@@ -305,7 +335,9 @@ export default function PublicFreelancerDetailPage() {
 
               {(p.services?.length ?? 0) > 0 && (
                 <section>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Services</div>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                    <PackageCheck className="h-4 w-4" /> Services
+                  </div>
                   <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
                     {p.services!.map((s) => (
                       <li key={s}>{s}</li>
@@ -314,79 +346,12 @@ export default function PublicFreelancerDetailPage() {
                 </section>
               )}
 
-              {/* ===== Packages ===== */}
-              {Array.isArray(p.ratePlans) && p.ratePlans.length > 0 && (
-                <section>
-                  <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">Packages</div>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    {p.ratePlans!.map((rp) => {
-                      const disabled = rp.price <= 0 || (hasActiveOrder && activePlanType === rp.type);
-                      return (
-                        <div
-                          key={rp.type}
-                          className="group relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-b from-white to-emerald-50/40 p-5 shadow-sm ring-1 ring-transparent transition hover:-translate-y-0.5 hover:shadow-md hover:ring-emerald-200"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="text-xs font-semibold uppercase tracking-wider text-emerald-700">
-                                {rp.type}
-                              </div>
-                              <div className="mt-1 text-2xl font-bold text-slate-900">
-                                {rp.price > 0 ? `$${rp.price}` : "—"}
-                                {rp.price > 0 && (
-                                  <span className="ml-1 text-xs font-medium text-slate-500">/project</span>
-                                )}
-                              </div>
-                            </div>
-                            <Badge className="bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200">
-                              Popular
-                            </Badge>
-                          </div>
-
-                          {rp.description && (
-                            <p className="mt-3 line-clamp-3 text-sm text-slate-600">{rp.description}</p>
-                          )}
-
-                          <div className="mt-4 flex items-center gap-2">
-                            <Button
-                              className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:hover:bg-emerald-600"
-                              onClick={() => setPurchasePlan(rp)}
-                              disabled={disabled}
-                            >
-                              {hasActiveOrder && activePlanType === rp.type ? "Purchase (locked)" : "Purchase"}
-                            </Button>
-                            <Button
-                              asChild
-                              variant="outline"
-                              className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                              disabled={hasActiveOrder && activePlanType === rp.type}
-                            >
-                              <Link
-                                href={`/client/messages?to=${encodeURIComponent(
-                                  p.userName
-                                )}&plan=${encodeURIComponent(rp.type)}&type=custom-offer`}
-                              >
-                                Custom offer
-                              </Link>
-                            </Button>
-                          </div>
-
-                          {hasActiveOrder && activePlanType === rp.type && (
-                            <div className="mt-2 text-[11px] text-slate-500">
-                              You have an active {activePlanType} project with {firstName}. Finish it to purchase{" "}
-                              {activePlanType} again.
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
               {/* ===== Portfolio ===== */}
               <section>
-                <div className="mb-3 text-xs uppercase tracking-wide text-slate-500">Portfolio</div>
+                <div className="mb-3 flex items-center gap-2 text-xs uppercase tracking-wide text-slate-500">
+                  <FolderGit2 className="h-4 w-4" />
+                  Portfolio
+                </div>
 
                 {p.portfolio?.length ? (
                   <div className="relative">
@@ -433,53 +398,114 @@ export default function PublicFreelancerDetailPage() {
             </div>
           </div>
 
-          {/* ===== RIGHT COLUMN (sticky) ===== */}
+          {/* ===== RIGHT COLUMN (sticky) — Packages in Tabs ===== */}
           <aside className="space-y-4 md:sticky md:top-4">
-            <div className="rounded-2xl border border-emerald-200 bg-gradient-to-b from-white to-emerald-50/40 p-5 shadow-sm">
-              {minPrice !== null && (
-                <div className="mb-3">
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Starting at</div>
-                  <div className="text-3xl font-bold text-slate-900">${minPrice}</div>
-                </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="mb-3 flex items-center gap-2">
+                <PackageCheck className="h-5 w-5 text-emerald-600" />
+                <h2 className="text-base font-semibold text-slate-900">Packages</h2>
+              </div>
+
+              {Array.isArray(p.ratePlans) && p.ratePlans.length > 0 ? (
+                <Tabs defaultValue={p.ratePlans[0]?.type || "Basic"} className="w-full">
+                  <TabsList className="grid w-full grid-cols-3">
+                    <TabsTrigger value="Basic">Basic</TabsTrigger>
+                    <TabsTrigger value="Standard">Standard</TabsTrigger>
+                    <TabsTrigger value="Premium">Premium</TabsTrigger>
+                  </TabsList>
+
+                  {p.ratePlans.map((rp) => {
+                    const isLocked = hasActiveOrder && activePlanType === rp.type;
+                    return (
+                      <TabsContent key={rp.type} value={rp.type} className="mt-4">
+                        <div className="rounded-xl border border-slate-200 p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900">{rp.type}</div>
+                              <div className="mt-1 text-2xl font-bold text-slate-900">
+                                ${rp.price}
+                                <span className="ml-1 text-xs font-medium text-slate-500">/project</span>
+                              </div>
+                            </div>
+                            <Badge className="bg-slate-100 text-slate-700 ring-1 ring-slate-200">Popular</Badge>
+                          </div>
+
+                          {rp.description && (
+                            <p className="mt-3 text-sm leading-relaxed text-slate-700">{rp.description}</p>
+                          )}
+
+                          <div className="mt-4 grid gap-2 text-sm">
+                            <div className="inline-flex items-center gap-2 text-slate-700">
+                              <Clock className="h-4 w-4" />
+                              Delivery: <span className="font-medium">{rp.deliveryDays} days</span>
+                            </div>
+                            <div className="inline-flex items-center gap-2 text-slate-700">
+                              <Repeat2 className="h-4 w-4" />
+                              Revisions: <span className="font-medium">{rp.revisions}</span>
+                            </div>
+                          </div>
+
+                          {rp.whatsIncluded?.length ? (
+                            <div className="mt-4">
+                              <div className="text-xs uppercase tracking-wide text-slate-500">What’s included</div>
+                              <ul className="mt-2 space-y-1.5">
+                                {rp.whatsIncluded.map((item, i) => (
+                                  <li key={`${item}-${i}`} className="flex items-start gap-2 text-sm text-slate-700">
+                                    <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-600" />
+                                    <span>{item}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+
+                          <div className="mt-5 flex flex-col gap-2">
+                            <Button
+                              className="w-full"
+                              onClick={() => setPurchasePlan(rp)}
+                              disabled={isLocked}
+                            >
+                              {isLocked ? `Purchase (locked)` : `Purchase ${rp.type}`}
+                            </Button>
+
+                            <Button
+                              asChild
+                              variant="outline"
+                              className="w-full"
+                              disabled={isLocked}
+                            >
+                              <Link
+                                href={`/client/messages?to=${encodeURIComponent(
+                                  p.userName
+                                )}&plan=${encodeURIComponent(rp.type)}&type=custom-offer`}
+                              >
+                                Ask for a custom offer
+                              </Link>
+                            </Button>
+
+                            {isLocked && (
+                              <div className="text-[11px] text-slate-500">
+                                You have an active {rp.type} project with {firstName}. Finish it to purchase {rp.type} again.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </TabsContent>
+                    );
+                  })}
+                </Tabs>
+              ) : (
+                <div className="text-sm text-slate-600">No packages available.</div>
               )}
 
-              <p className="text-sm text-slate-600">
-                Have questions or need a custom package? Send a message to{" "}
-                <span className="font-medium text-slate-800">{firstName}</span>.
-              </p>
-
-              <div className="mt-3 flex flex-col gap-2">
-                {/* Messaging stays enabled */}
-                <Button asChild className="w-full">
+              {/* Messaging button under tabs (always enabled) */}
+              <div className="mt-4">
+                <Button asChild variant="outline" className="w-full">
                   <Link href={`/client/messages?to=${encodeURIComponent(p.userName)}`}>
                     <MessageSquare className="mr-2 h-4 w-4" />
                     Message {firstName}
                   </Link>
                 </Button>
-
-                {/* “Continue with …” is disabled only if that exact plan is active */}
-                {p.ratePlans?.[0] && (
-                  <Button
-                    asChild
-                    variant="outline"
-                    className="w-full border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                    disabled={hasActiveOrder && activePlanType === p.ratePlans[0].type}
-                  >
-                    <Link
-                      href={`/client/messages?to=${encodeURIComponent(
-                        p.userName
-                      )}&plan=${encodeURIComponent(p.ratePlans[0].type)}`}
-                    >
-                      Continue with {p.ratePlans[0].type}
-                    </Link>
-                  </Button>
-                )}
-
-                {hasActiveOrder && activePlanType && (
-                  <div className="text-[11px] text-slate-500">
-                    The {activePlanType} package is locked while your current {activePlanType} project is active.
-                  </div>
-                )}
               </div>
             </div>
           </aside>
@@ -723,7 +749,7 @@ function PurchaseFlow({
           </div>
 
           {current.length > 0 && (
-            <ul className="mt-2 space-y-1 text-sm text-slate-700 max-h-28 overflow-auto pr-1">
+            <ul className="mt-2 max-h-28 space-y-1 overflow-auto pr-1 text-sm text-slate-700">
               {current.map((f, i) => (
                 <li key={`${f.url}-${i}`}>
                   • {f.name}
@@ -739,8 +765,8 @@ function PurchaseFlow({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center bg-slate-900/40 p-0 md:p-6">
-      <div className="relative w-full max-w-2xl rounded-t-2xl md:rounded-2xl border border-slate-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/40 p-0 md:items-center md:p-6">
+      <div className="relative w-full max-w-2xl rounded-t-2xl border border-slate-200 bg-white shadow-2xl md:rounded-2xl">
         <div className="flex items-center justify-between border-b border-slate-200 p-4">
           <div className="font-semibold text-slate-900">
             {step === "checkout" && "Checkout"}
@@ -780,7 +806,7 @@ function PurchaseFlow({
                 You’re buying <span className="font-semibold">{plan.type}</span> from{" "}
                 <span className="font-semibold">{freelancerName}</span>.
               </div>
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm">
                 <div className="flex items-center justify-between">
                   <div>Subtotal</div>
                   <div className="font-semibold">${plan.price}</div>
@@ -789,7 +815,7 @@ function PurchaseFlow({
                   <div>Fees</div>
                   <div>$0.00</div>
                 </div>
-                <div className="mt-2 border-t border-emerald-200 pt-2 flex items-center justify-between">
+                <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2">
                   <div className="font-semibold">Total</div>
                   <div className="font-bold">${plan.price}</div>
                 </div>
