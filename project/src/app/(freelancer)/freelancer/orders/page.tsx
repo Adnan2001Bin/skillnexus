@@ -12,6 +12,7 @@ import {
   Download,
   FileText,
   Mail,
+  Hourglass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -27,6 +28,7 @@ import {
   AlertDialogDescription,
 } from "@/components/ui/alert-dialog";
 
+/* ================= Types ================= */
 type RequirementFile = { name: string; size?: number; url: string };
 type RequirementAnswer = {
   id: string;
@@ -49,6 +51,8 @@ type OrderRow = {
   paymentStatus: "unpaid" | "paid";
   projectStatus: "pending" | "approved" | "cancelled" | "completed";
   createdAt: string;
+  deliveryDays: number;
+  acceptedAt: string | null;
 };
 
 type OrderDetail = {
@@ -60,9 +64,77 @@ type OrderDetail = {
   paymentStatus: "unpaid" | "paid";
   projectStatus: "pending" | "approved" | "cancelled" | "completed";
   createdAt: string;
+  deliveryDays: number;
+  acceptedAt: string | null;
   requirementsSnapshot: Requirement[];
   requirementAnswers: RequirementAnswer[];
 };
+
+/* ================= Small helpers ================= */
+
+function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "green" | "amber" | "blue" | "red" }) {
+  const map: Record<string, string> = {
+    slate: "bg-slate-100 text-slate-700 ring-slate-200",
+    green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    amber: "bg-amber-50 text-amber-700 ring-amber-200",
+    blue: "bg-blue-50 text-blue-700 ring-blue-200",
+    red: "bg-red-50 text-red-700 ring-red-200",
+  };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${map[tone]}`}>{children}</span>
+  );
+}
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <div className="text-xs uppercase tracking-wide text-slate-500">{children}</div>;
+}
+
+/** Live countdown hook (D/H/M/S) */
+function useCountdown(deadline: Date | null) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!deadline) return;
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, [deadline]);
+
+  if (!deadline) {
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, overdue: false, msLeft: 0 };
+  }
+
+  const msLeft = deadline.getTime() - now.getTime();
+  const overdue = msLeft < 0;
+  const abs = Math.abs(msLeft);
+
+  const days = Math.floor(abs / (24 * 60 * 60 * 1000));
+  const hours = Math.floor((abs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+  const minutes = Math.floor((abs % (60 * 60 * 1000)) / (60 * 1000));
+  const seconds = Math.floor((abs % (60 * 1000)) / 1000);
+
+  return { days, hours, minutes, seconds, overdue, msLeft };
+}
+
+/** Pretty block showing D • H • M • S */
+function CountdownPills({ acceptedAt, deliveryDays }: { acceptedAt: string | null; deliveryDays: number }) {
+  if (!acceptedAt) {
+    return <div className="text-xs text-slate-500">Awaiting acceptance…</div>;
+  }
+  const deadline = new Date(new Date(acceptedAt).getTime() + deliveryDays * 24 * 60 * 60 * 1000);
+  const { days, hours, minutes, seconds, overdue } = useCountdown(deadline);
+
+  return (
+    <div className={`inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs ring-1 ${overdue ? "bg-red-50 text-red-700 ring-red-200" : "bg-slate-50 text-slate-700 ring-slate-200"}`}>
+      <Hourglass className="h-3.5 w-3.5" />
+      <span className="font-medium">{overdue ? "Overdue" : "Time left"}:</span>
+      <span className="rounded bg-white px-1.5 py-0.5 ring-1 ring-slate-200">{days}d</span>
+      <span className="rounded bg-white px-1.5 py-0.5 ring-1 ring-slate-200">{hours}h</span>
+      <span className="rounded bg-white px-1.5 py-0.5 ring-1 ring-slate-200">{minutes}m</span>
+      <span className="rounded bg-white px-1.5 py-0.5 ring-1 ring-slate-200">{seconds}s</span>
+    </div>
+  );
+}
+
+/* ================= Page ================= */
 
 export default function FreelancerOrdersPage() {
   const { toast } = useToast();
@@ -112,7 +184,7 @@ export default function FreelancerOrdersPage() {
       toast({ variant: "destructive", title: "Accept failed", description: json?.message || "Unable to accept order." });
       return;
     }
-    setRows(prev => prev.map(r => r.id === id ? { ...r, projectStatus: "approved" } : r));
+    setRows(prev => prev.map(r => r.id === id ? { ...r, projectStatus: "approved", acceptedAt: new Date().toISOString() } : r));
     toast({ title: "Order accepted", description: "The project is now in progress." });
   };
 
@@ -186,13 +258,14 @@ export default function FreelancerOrdersPage() {
               <th className="px-4 py-3">Package</th>
               <th className="px-4 py-3">Payment</th>
               <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Deadline</th>
               <th className="px-4 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">No orders found.</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">No orders found.</td>
               </tr>
             )}
             <AnimatePresence initial={false}>
@@ -219,7 +292,7 @@ export default function FreelancerOrdersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-slate-900">{r.planType}</div>
-                      <div className="text-xs text-slate-500">${r.price}</div>
+                      <div className="text-xs text-slate-500">${r.price} • {r.deliveryDays}d</div>
                     </td>
                     <td className="px-4 py-3">
                       <Badge tone={r.paymentStatus === "paid" ? "green" : "amber"}>
@@ -237,6 +310,15 @@ export default function FreelancerOrdersPage() {
                         {r.projectStatus}
                       </Badge>
                     </td>
+
+                    <td className="px-4 py-3">
+                      {r.projectStatus === "approved" ? (
+                        <CountdownPills acceptedAt={r.acceptedAt} deliveryDays={r.deliveryDays} />
+                      ) : (
+                        <div className="text-xs text-slate-500">—</div>
+                      )}
+                    </td>
+
                     <td className="px-4 py-3">
                       <div className="flex justify-end gap-2">
                         <Button variant="outline" size="sm" onClick={() => setViewId(r.id)} title="View">
@@ -308,26 +390,7 @@ export default function FreelancerOrdersPage() {
   );
 }
 
-/* ---------- Small bits ---------- */
-
-function Badge({ children, tone = "slate" }: { children: React.ReactNode; tone?: "slate" | "green" | "amber" | "blue" | "red" }) {
-  const map: Record<string, string> = {
-    slate: "bg-slate-100 text-slate-700 ring-slate-200",
-    green: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    amber: "bg-amber-50 text-amber-700 ring-amber-200",
-    blue: "bg-blue-50 text-blue-700 ring-blue-200",
-    red: "bg-red-50 text-red-700 ring-red-200",
-  };
-  return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${map[tone]}`}>{children}</span>
-  );
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <div className="text-xs uppercase tracking-wide text-slate-500">{children}</div>;
-}
-
-/* ---------- Drawer that shows order + requirement answers (files view/download) ---------- */
+/* ---------- Drawer (shows D/H/M/S and files) ---------- */
 
 function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
@@ -365,9 +428,10 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                 </div>
                 <div className="text-right">
                   <div className="text-sm font-semibold text-slate-900">{o.planType}</div>
-                  <div className="text-xs text-slate-500">${o.price}</div>
+                  <div className="text-xs text-slate-500">${o.price} • {o.deliveryDays}d</div>
                 </div>
               </div>
+
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <SectionTitle>Payment</SectionTitle>
@@ -389,6 +453,18 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                     </Badge>
                   </div>
                 </div>
+
+                <div className="col-span-2">
+                  <SectionTitle>Deadline</SectionTitle>
+                  <div className="mt-1">
+                    {o.projectStatus === "approved" ? (
+                      <CountdownPills acceptedAt={o.acceptedAt} deliveryDays={o.deliveryDays} />
+                    ) : (
+                      <div className="text-xs text-slate-500">—</div>
+                    )}
+                  </div>
+                </div>
+
                 <div className="col-span-2">
                   <SectionTitle>Client</SectionTitle>
                   <div className="mt-1 inline-flex items-center gap-2 text-slate-800">
@@ -398,7 +474,7 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
               </div>
             </div>
 
-            {/* Requirements + answers */}
+            {/* Requirements + answers (with files view/download) */}
             <div className="rounded-xl border border-slate-200 p-4">
               <SectionTitle>Requirements</SectionTitle>
               <div className="mt-3 space-y-4">
@@ -427,14 +503,12 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                           <div className="mt-2 text-sm">
                             {!ans && <div className="text-slate-500 italic">No answer</div>}
 
-                            {/* Text / Textarea */}
                             {ans?.text && (
                               <div className="rounded bg-slate-50 p-2 text-slate-800 whitespace-pre-wrap">
                                 {ans.text}
                               </div>
                             )}
 
-                            {/* Multiple choice */}
                             {ans?.options && ans.options.length > 0 && (
                               <div className="flex flex-wrap gap-2">
                                 {ans.options.map((op) => (
@@ -445,10 +519,9 @@ function OrderDrawer({ id, onClose }: { id: string | null; onClose: () => void }
                               </div>
                             )}
 
-                            {/* Files */}
                             {ans?.files && ans.files.length > 0 && (
                               <div className="mt-2">
-                                <div className="text-xs uppercase tracking-wide text-slate-500 mb-1">Files</div>
+                                <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">Files</div>
                                 <ul className="space-y-2">
                                   {ans.files.map((f, i) => (
                                     <li key={`${f.url}-${i}`} className="flex items-center justify-between gap-3 rounded border border-slate-200 p-2">

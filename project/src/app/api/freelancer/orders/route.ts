@@ -1,3 +1,4 @@
+// src/app/api/freelancer/orders/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
@@ -33,10 +34,7 @@ export async function GET(req: Request) {
     }
     const query = q ? { $and: [where, { $or: textFilters }] } : where;
 
-    const list = await OrderModel
-      .find(query)
-      .sort({ createdAt: -1 })
-      .lean();
+    const list = await OrderModel.find(query).sort({ createdAt: -1 }).lean();
 
     const payload = list.map((o) => ({
       id: String(o._id),
@@ -47,6 +45,9 @@ export async function GET(req: Request) {
       paymentStatus: o.paymentStatus,
       projectStatus: o.projectStatus,
       createdAt: o.createdAt,
+      /** NEW */
+      deliveryDays: o.deliveryDays,
+      acceptedAt: o.acceptedAt || null,
     }));
 
     return NextResponse.json({ success: true, list: payload }, { status: 200 });

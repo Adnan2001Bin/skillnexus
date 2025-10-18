@@ -1,3 +1,4 @@
+// src/models/order.model.ts
 import mongoose, { Schema, Types, Document } from "mongoose";
 
 /** --- Types that mirror your freelancer requirements schema --- */
@@ -9,47 +10,47 @@ export type RequirementType =
   | "instructions";
 
 export interface IRequirement {
-  id: string; // stable client-side id
+  id: string;
   type: RequirementType;
-  question?: string | null;       // for text/textarea/multiple_choice
+  question?: string | null;
   helperText?: string | null;
   required?: boolean;
-  options?: string[];             // for multiple_choice
-  allowMultiple?: boolean;        // for multiple_choice
-  accepts?: string[];             // for file
-  maxFiles?: number | null;       // for file
-  content?: string | null;        // for instructions only (no response)
+  options?: string[];
+  allowMultiple?: boolean;
+  accepts?: string[];
+  maxFiles?: number | null;
+  content?: string | null;
 }
 
-/** --- Client answers captured after payment --- */
 export interface IRequirementAnswer {
-  id: string;              // matches IRequirement.id
-  text?: string | null;    // for text/textarea
-  options?: string[];      // for multiple_choice
-  // IMPORTANT: include uploadthing URL so the freelancer can access files
+  id: string;
+  text?: string | null;
+  options?: string[];
   files?: { name: string; size?: number; url: string }[];
 }
 
 export interface IOrder extends Document {
   _id: Types.ObjectId;
 
-  orderNumber?: string | null;    // short human-friendly id
+  orderNumber?: string | null;
 
-  clientId?: Types.ObjectId | null;         // optional (if you later add auth)
-  clientEmail?: string | null;              // optional
+  clientId?: Types.ObjectId | null;
+  clientEmail?: string | null;
   freelancerId: Types.ObjectId;
   freelancerName: string;
   planType: "Basic" | "Standard" | "Premium";
-  price: number; // price snapshot at purchase
+  price: number;
+
+  /** NEW: snapshot of deliveryDays for the selected plan */
+  deliveryDays: number;
 
   paymentStatus: "unpaid" | "paid";
-  // added "completed" now so you won't need a migration later
   projectStatus: "pending" | "approved" | "cancelled" | "completed";
 
-  // snapshot the requirements at time of purchase so edits later don't affect past orders
-  requirementsSnapshot: IRequirement[];
+  /** NEW: set when freelancer accepts */
+  acceptedAt?: Date | null;
 
-  // answers submitted by the client (after payment)
+  requirementsSnapshot: IRequirement[];
   requirementAnswers: IRequirementAnswer[];
 
   createdAt: Date;
@@ -82,7 +83,6 @@ const RequirementAnswerSchema = new Schema<IRequirementAnswer>(
     text: { type: String, default: null },
     options: { type: [String], default: [] },
     files: {
-      // include URL for uploadthing
       type: [{ name: String, size: Number, url: { type: String, required: true } }],
       default: [],
     },
@@ -103,6 +103,9 @@ const OrderSchema = new Schema<IOrder>(
     planType: { type: String, enum: ["Basic", "Standard", "Premium"], required: true },
     price: { type: Number, required: true, min: 0 },
 
+    /** NEW */
+    deliveryDays: { type: Number, required: true, min: 1, default: 1 },
+
     paymentStatus: { type: String, enum: ["unpaid", "paid"], default: "unpaid", index: true },
     projectStatus: {
       type: String,
@@ -111,21 +114,21 @@ const OrderSchema = new Schema<IOrder>(
       index: true,
     },
 
+    /** NEW */
+    acceptedAt: { type: Date, default: null },
+
     requirementsSnapshot: { type: [RequirementSchema], default: [] },
     requirementAnswers: { type: [RequirementAnswerSchema], default: [] },
   },
   { timestamps: true, versionKey: false }
 );
 
-// Helpful compound indexes for dashboards/lists
 OrderSchema.index({ clientId: 1, createdAt: -1 });
 OrderSchema.index({ freelancerId: 1, createdAt: -1 });
 
-/** Optional: generate a short orderNumber once on create */
 OrderSchema.pre("save", function (next) {
   if (!this.isNew) return next();
   if (!this.orderNumber) {
-    // very simple short id; replace with nanoid/uuid if you prefer
     this.orderNumber = `ORD-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   }
   next();

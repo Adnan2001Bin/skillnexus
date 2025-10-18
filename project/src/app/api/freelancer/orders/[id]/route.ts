@@ -1,3 +1,4 @@
+// src/app/api/freelancer/orders/[id]/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/app/api/auth/[...nextauth]/options";
@@ -33,6 +34,9 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         paymentStatus: o.paymentStatus,
         projectStatus: o.projectStatus,
         createdAt: o.createdAt,
+        /** NEW */
+        deliveryDays: o.deliveryDays,
+        acceptedAt: o.acceptedAt || null,
         requirementsSnapshot: o.requirementsSnapshot || [],
         requirementAnswers: o.requirementAnswers || [],
       },
@@ -61,32 +65,30 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     await connectDB();
 
     const body = await req.json();
-    const { action, reason } = PatchSchema.parse(body);
+    const { action } = PatchSchema.parse(body);
 
     const o = await OrderModel.findById(params.id);
     if (!o || String(o.freelancerId) !== String((session.user as any)._id)) {
       return NextResponse.json({ success: false, message: "Order not found" }, { status: 404 });
     }
 
-    // Only allow state transitions from valid states
     if (action === "accept") {
       if (o.projectStatus !== "pending") {
         return NextResponse.json({ success: false, message: "Order cannot be accepted" }, { status: 400 });
       }
-      o.projectStatus = "approved"; // in progress
+      o.projectStatus = "approved";
+      /** NEW: start the clock now */
+      o.acceptedAt = new Date();
     } else if (action === "reject") {
       if (o.projectStatus !== "pending") {
         return NextResponse.json({ success: false, message: "Order cannot be rejected" }, { status: 400 });
       }
       o.projectStatus = "cancelled";
-      // (Optional) you could persist a rejectionReason field if desired
-      // (Not in schema now)
     } else if (action === "deliver") {
       if (o.projectStatus !== "approved") {
         return NextResponse.json({ success: false, message: "Only in-progress orders can be delivered" }, { status: 400 });
       }
       o.projectStatus = "completed";
-      // If later you want to attach delivery files/notes, extend schema and set here.
     }
 
     await o.save();
